@@ -15,8 +15,8 @@ Extrude {0, 1, 0} {
 
 def generate_meshfile(name,layers):
 
-
-    file(name+".geo",'w').write(
+    if name != "2d":
+      file(name+".geo",'w').write(
         meshtemplate.replace('<dx>',str(1./layers)
                  ).replace('<layers>',str(layers)))
 

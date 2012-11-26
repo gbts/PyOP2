@@ -69,6 +69,12 @@ class ParLoop(rt.ParLoop):
         for c in Const._definitions():
             _args.append(c.data)
 
+        for arg in self.args:
+            if arg._is_indirect or arg._is_mat:
+                maps = as_tuple(arg.map, Map)
+                for map in maps:
+                   if map.off != None:
+                       _args.append(map.off)
         _fun(*_args)
 
     def generate_code(self):
@@ -253,6 +259,23 @@ class ParLoop(rt.ParLoop):
             tmp = '%(name)s[%%(i)s] = ((%(type)s *)(((PyArrayObject *)_%(name)s)->data))[%%(i)s]' % d
             return ';\n'.join([tmp % {'i' : i} for i in range(c.cdim)])
 
+        def c_add_off(c,layers,count):
+            return """
+            for(int j=0; j<%(layers)s;j++){
+                %(name)s[j] += _off%(num)s[j];
+            }""" % {'name' : c_vec_name(c),
+            'layers' : layers,
+            'num' : count}
+
+        def c_off_init(c):
+            return "PyObject *off%(name)s" % {'name' : c }
+
+        def c_off_decl(count):
+            return 'int * _off%(cnt)s = (int *)(((PyArrayObject *)off%(cnt)s)->data)' % { 'cnt' : count }
+
+        def extrusion_loop(d):
+            return "for (int j_0=0; j_0<%d; ++j_0){" % d
+
         args = self.args
         _wrapper_args = ', '.join([c_wrapper_arg(arg) for arg in args])
 
@@ -289,18 +312,50 @@ class ParLoop(rt.ParLoop):
         else:
             _const_args = ''
         _const_inits = ';\n'.join([c_const_init(c) for c in Const._definitions()])
+
+
+        count = 0
+        off_i = []
+        off_d = []
+        off_a = []
+        _off_args = ""
+        _off_inits = ""
+        _apply_offset = ""
+        _extr_loop = ""
+        _extr_loop_close = ""
+        if self._it_space.layers > 1:
+            for arg in args:
+                if not arg._is_mat and arg._is_vec_map:
+                    count += 1
+                    off_i.append(c_off_init(count))
+                    off_d.append(c_off_decl(count))
+                    off_a.append(c_add_off(arg,arg.map.off.size,count))
+        if off_i != []:
+            _off_args = ', '
+            _off_args +=', '.join(off_i)
+            _off_inits = ';\n'.join(off_d)
+            _apply_offset = ' \n'.join(off_a)
+            _extr_loop = '\n'
+            _extr_loop += extrusion_loop(self._it_space.layers-1)
+            _extr_loop_close = '}'
+            _kernel_args += ', j_0'
+
         wrapper = """
-            void wrap_%(kernel_name)s__(%(set_size_wrapper)s, %(wrapper_args)s %(const_args)s) {
+            void wrap_%(kernel_name)s__(%(set_size_wrapper)s, %(wrapper_args)s %(const_args)s %(off_args)s) {
             %(set_size_dec)s;
             %(wrapper_decs)s;
             %(tmp_decs)s;
             %(const_inits)s;
+            %(off_inits)s;
             for ( int i = 0; i < %(set_size)s; i++ ) {
             %(vec_inits)s;
             %(itspace_loops)s
+            %(extr_loop)s
             %(zero_tmps)s;
             %(kernel_name)s(%(kernel_args)s);
             %(addtos_vector_field)s;
+            %(apply_offset)s
+            %(extr_loop_close)s
             %(itspace_loop_close)s
             %(addtos_scalar_field)s;
             }
@@ -333,7 +388,12 @@ class ParLoop(rt.ParLoop):
                                        'kernel_args' : _kernel_args,
                                        'addtos_vector_field' : _addtos_vector_field,
                                        'addtos_scalar_field' : _addtos_scalar_field,
-                                       'assembles' : _assembles}
+                                       'assembles' : _assembles,
+                                       'apply_offset' : _apply_offset,
+                                       'off_args' : _off_args,
+                                       'off_inits' : _off_inits,
+                                       'extr_loop' : _extr_loop,
+                                       'extr_loop_close' : _extr_loop_close}
 
         # We need to build with mpicc since that's required by PETSc
         cc = os.environ.get('CC')

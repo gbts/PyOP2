@@ -383,6 +383,15 @@ class Map(op2.Map):
                  self)
             self._device_values.set(self._values, _queue)
 
+    def _off_to_device(self):
+        if not hasattr(self, '_off_device_values'):
+            self._off_device_values = array.to_device(_queue, self.off)
+        else:
+            from warnings import warn
+            warn("Copying Map OFFSET data for %s again, do you really want to do this?" % \
+                 self)
+            self._off_device_values.set(self.off, _queue)
+
 class Plan(op2.Plan):
     @property
     def ind_map(self):
@@ -474,7 +483,8 @@ class ParLoop(op2.ParLoop):
         """Direct code generation to follow colored execution for global matrix insertion."""
         return not _supports_64b_atomics and not not self._matrix_args
 
-    def _i_partition_size(self):
+
+    def _i_partition_size(self,layers=None):
         #TODO FIX: something weird here
         #available_local_memory
         warnings.warn('temporary fix to available local memory computation (-512)')
@@ -503,10 +513,18 @@ class ParLoop(op2.ParLoop):
         # inside shared memory padding
         available_local_memory -= 2 * (len(self._unique_indirect_dat_args) - 1)
 
+        #extruded case:
+        #1. The MAPS are flattened so for example for a map 1->10, 10 "args" are considered
+        #2. The max_bytes below represents the number of bytes for each iteration element of the parloop
+        #   for example for a WEDGE when we loop over triangles
+        #3. TODO: divide by the size of a column, return the number of columns in each partition
         max_bytes = sum(map(lambda a: a.data._bytes_per_elem, self._all_indirect_args))
+        if layers > 1:
+            max_bytes *= layers
+        #returns the number of elements in a partition
         return available_local_memory / (2 * _warpsize * max_bytes) * (2 * _warpsize)
 
-    def launch_configuration(self):
+    def launch_configuration(self, layers=None):
         if self._is_direct:
             per_elem_max_local_mem_req = self._max_shared_memory_needed_per_set_element
             shared_memory_offset = per_elem_max_local_mem_req * _warpsize
@@ -536,7 +554,7 @@ class ParLoop(op2.ParLoop):
                     'local_memory_size': local_memory_req,
                     'local_memory_offset': shared_memory_offset}
         else:
-            return {'partition_size': self._i_partition_size()}
+            return {'partition_size': self._i_partition_size(layers)}
 
     def codegen(self, conf):
         def instrument_user_kernel():
@@ -563,6 +581,9 @@ class ParLoop(op2.ParLoop):
             for i in self._it_space.extents:
                 inst.append(("__private", None))
 
+            if self._it_space.layers > 1:
+                inst.append(("__private", None))
+
             return self._kernel.instrument(inst, Const._definitions())
 
         #do codegen
@@ -586,19 +607,31 @@ class ParLoop(op2.ParLoop):
             prg = cl.Program(_ctx, self._src).build(options="-Werror")
             return prg.__getattr__(self._stub_name)
 
-        conf = self.launch_configuration()
+        conf = self.launch_configuration(self._it_space.layers)
 
         if self._is_indirect:
-            self._plan = Plan(self.kernel, self._it_space.iterset,
+            if self._it_space.layers > 1:
+                #extruded case
+                self._plan = Plan(self.kernel, self._it_space.iterset,
                               *self._unwound_args,
                               partition_size=conf['partition_size'],
                               matrix_coloring=self._requires_matrix_coloring)
-            conf['local_memory_size'] = self._plan.nshared
-            conf['ninds'] = self._plan.ninds
-            conf['work_group_size'] = min(_max_work_group_size,
+
+                conf['local_memory_size'] = self._plan.nshared
+                conf['ninds'] = self._plan.ninds
+                conf['work_group_size'] = min(_max_work_group_size,conf['partition_size'])
+                conf['work_group_count'] = self._plan.nblocks
+            else:
+                self._plan = Plan(self.kernel, self._it_space.iterset,
+                              *self._unwound_args,
+                              partition_size=conf['partition_size'],
+                              matrix_coloring=self._requires_matrix_coloring)
+                conf['local_memory_size'] = self._plan.nshared
+                conf['ninds'] = self._plan.ninds
+                conf['work_group_size'] = min(_max_work_group_size,
                                           conf['partition_size'])
-            conf['work_group_count'] = self._plan.nblocks
-        conf['warpsize'] = _warpsize
+                conf['work_group_count'] = self._plan.nblocks
+                conf['warpsize'] = _warpsize
 
         self._src, self._fun = op2._parloop_cache.get(self._cache_key, (None, None))
         if self._src is None:
@@ -652,6 +685,12 @@ class ParLoop(op2.ParLoop):
             self._fun.append_arg(self._plan.nelems.data)
             self._fun.append_arg(self._plan.nthrcol.data)
             self._fun.append_arg(self._plan.thrcol.data)
+
+            if self._it_space.layers > 1:
+                for arg in self.args:
+                    if not arg._is_mat and arg._is_vec_map:
+                        arg.map._off_to_device()
+                        kernel.append_arg(arg.map._off_device_values.data)
 
             block_offset = 0
             for i in range(self._plan.ncolors):

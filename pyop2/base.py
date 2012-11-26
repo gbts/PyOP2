@@ -194,9 +194,10 @@ class Set(object):
     _globalcount = 0
 
     @validate_type(('name', str, NameTypeError))
-    def __init__(self, size=None, name=None):
+    def __init__(self, size=None, name=None, layers=None):
         self._size = size
         self._name = name or "set_%d" % Set._globalcount
+        self._layers = layers or -1
         self._lib_handle = None
         Set._globalcount += 1
 
@@ -212,6 +213,15 @@ class Set(object):
     def name(self):
         """User-defined label"""
         return self._name
+
+    @property
+    def layers(self):
+        """User-defined label"""
+        return self._layers
+
+    def setLayers(self,layers):
+        """User-defined label"""
+        self._layers = layers
 
     def __str__(self):
         return "OP2 Set: %s with size %s" % (self._name, self._size)
@@ -229,6 +239,7 @@ class IterationSpace(object):
     def __init__(self, iterset, extents=()):
         self._iterset = iterset
         self._extents = as_tuple(extents, int)
+        self._layers = iterset.layers
 
     @property
     def iterset(self):
@@ -249,6 +260,10 @@ class IterationSpace(object):
     def size(self):
         """The size of the :class:`Set` over which this IterationSpace is defined."""
         return self._iterset.size
+
+    @property
+    def layers(self):
+        return self._layers
 
     @property
     def _extent_ranges(self):
@@ -570,10 +585,11 @@ class Map(object):
 
     @validate_type(('iterset', Set, SetTypeError), ('dataset', Set, SetTypeError), \
             ('dim', int, DimTypeError), ('name', str, NameTypeError))
-    def __init__(self, iterset, dataset, dim, values=None, name=None):
+    def __init__(self, iterset, dataset, dim, values=None, name=None, off=None):
         self._iterset = iterset
         self._dataset = dataset
         self._dim = dim
+        self._off = off
         self._values = verify_reshape(values, np.int32, (iterset.size, dim), \
                                       allow_none=True)
         self._name = name or "map_%d" % Map._globalcount
@@ -617,6 +633,11 @@ class Map(object):
     def values(self):
         """Mapping array."""
         return self._values
+
+    @property
+    def off(self):
+        """Mapping array."""
+        return self._off
 
     @property
     def name(self):
