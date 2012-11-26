@@ -193,9 +193,10 @@ class Set(object):
     _globalcount = 0
 
     @validate_type(('name', str, NameTypeError))
-    def __init__(self, size=None, name=None):
+    def __init__(self, size=None, name=None, layers=None):
         self._size = size
         self._name = name or "set_%d" % Set._globalcount
+        self._layers = layers or -1
         self._lib_handle = None
         Set._globalcount += 1
 
@@ -211,6 +212,15 @@ class Set(object):
     def name(self):
         """User-defined label"""
         return self._name
+
+    @property
+    def layers(self):
+        """User-defined label"""
+        return self._layers
+
+    def setLayers(self,layers):
+        """User-defined label"""
+        self._layers = layers
 
     def __str__(self):
         return "OP2 Set: %s with size %s" % (self._name, self._size)
@@ -228,6 +238,7 @@ class IterationSpace(object):
     def __init__(self, iterset, extents=()):
         self._iterset = iterset
         self._extents = as_tuple(extents, int)
+        self._layers = iterset.layers
 
     @property
     def iterset(self):
@@ -248,6 +259,10 @@ class IterationSpace(object):
     def size(self):
         """The size of the :class:`Set` over which this IterationSpace is defined."""
         return self._iterset.size
+
+    @property
+    def layers(self):
+	return self._layers
 
     @property
     def _extent_ranges(self):
@@ -558,10 +573,11 @@ class Map(object):
 
     @validate_type(('iterset', Set, SetTypeError), ('dataset', Set, SetTypeError), \
             ('dim', int, DimTypeError), ('name', str, NameTypeError))
-    def __init__(self, iterset, dataset, dim, values=None, name=None):
+    def __init__(self, iterset, dataset, dim, values=None, name=None, off=None):
         self._iterset = iterset
         self._dataset = dataset
         self._dim = dim
+        self._off = off
         self._values = verify_reshape(values, np.int32, (iterset.size, dim), \
                                       allow_none=True)
         self._name = name or "map_%d" % Map._globalcount
@@ -607,6 +623,11 @@ class Map(object):
         return self._values
 
     @property
+    def off(self):
+        """Mapping array."""
+        return self._off
+
+    @property
     def name(self):
         """User-defined label"""
         return self._name
@@ -621,6 +642,95 @@ class Map(object):
 
 IdentityMap = Map(Set(0), Set(0), 1, [], 'identity')
 """The identity map.  Used to indicate direct access to a :class:`Dat`."""
+
+
+class Map2(object):
+    """OP2 map, a relation between two :class:`Set` objects.
+
+    Each entry in the ``iterset`` maps to ``dim`` entries in the
+    ``dataset``. When a map is used in a :func:`par_loop`,
+    it is possible to use Python index notation to select an
+    individual entry on the right hand side of this map. There are three possibilities:
+
+    * No index. All ``dim`` :class:`Dat` entries will be passed to the
+      kernel.
+    * An integer: ``some_map[n]``. The ``n`` th entry of the
+      map result will be passed to the kernel.
+    * An :class:`IterationIndex`, ``some_map[pyop2.i[n]]``. ``n``
+      will take each value from ``0`` to ``e-1`` where ``e`` is the
+      ``n`` th extent passed to the iteration space for this :func:`par_loop`.
+      See also :data:`i`.
+    """
+
+    _globalcount = 0
+    _arg_type = Arg
+
+    def __init__(self, iterset, dataset, dim, off, values=None, name=None):
+        self._iterset = iterset
+        self._dataset = dataset
+        self._dim = dim
+        self._values = verify_reshape(values, np.int32, (iterset.size, dim), \
+                                      allow_none=True)
+        self._off = off
+        self._name = name or "map_%d" % Map._globalcount
+        self._lib_handle = None
+        Map._globalcount += 1
+
+    @validate_type(('index', (int, IterationIndex), IndexTypeError))
+    def __getitem__(self, index):
+        if isinstance(index, int) and not (0 <= index < self._dim):
+            raise IndexValueError("Index must be in interval [0,%d]" % (self._dim-1))
+        if isinstance(index, IterationIndex) and index.index not in [0, 1]:
+            raise IndexValueError("IterationIndex must be in interval [0,1]")
+        return self._arg_type(map=self, idx=index)
+
+    # This is necessary so that we can convert a Map to a tuple
+    # (needed in as_tuple).  Because, __getitem__ no longer returns a
+    # Map we have to explicitly provide an iterable interface
+    def __iter__(self):
+        yield self
+
+    def __getslice__(self, i, j):
+        raise NotImplementedError("Slicing maps is not currently implemented")
+
+    @property
+    def iterset(self):
+        """:class:`Set` mapped from."""
+        return self._iterset
+
+    @property
+    def dataset(self):
+        """:class:`Set` mapped to."""
+        return self._dataset
+
+    @property
+    def dim(self):
+        """Dimension of the mapping: number of dataset elements mapped to per
+        iterset element."""
+        return self._dim
+
+    @property
+    def values(self):
+        """Mapping array."""
+        return self._values
+
+    @property
+    def off(self):
+        """Mapping array."""
+        return self._off
+
+    @property
+    def name(self):
+        """User-defined label"""
+        return self._name
+
+    def __str__(self):
+        return "OP2 Map: %s from (%s) to (%s) with dim %s" \
+               % (self._name, self._iterset, self._dataset, self._dim)
+
+    def __repr__(self):
+        return "Map(%r, %r, %s, None, '%s')" \
+               % (self._iterset, self._dataset, self._dim, self._name)
 
 class Sparsity(object):
     """OP2 Sparsity, a matrix structure derived from the union of the outer product of pairs of :class:`Map` objects."""

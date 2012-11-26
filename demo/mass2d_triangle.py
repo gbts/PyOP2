@@ -74,6 +74,8 @@ L = v*f*dx
 
 mass, _, _ = compile_form(a, "mass")
 rhs, _, _  = compile_form(L, "rhs")
+print rhs.code
+
 
 # Set up simulation data structures
 

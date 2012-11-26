@@ -255,8 +255,8 @@ class Global(DeviceDataMixin, op2.Global):
 
 class Map(op2.Map):
     _arg_type = Arg
-    def __init__(self, iterset, dataset, dim, values, name=None):
-        op2.Map.__init__(self, iterset, dataset, dim, values, name)
+    def __init__(self, iterset, dataset, dim, values, name=None, off=None):
+        op2.Map.__init__(self, iterset, dataset, dim, values, name, off)
 
     def _to_device(self):
         raise RuntimeError("Abstract device class can't do this")
@@ -286,7 +286,9 @@ class Plan(core.op_plan):
         cached = _plan_cache.get(key, None)
         if cached is not None:
             return cached
+            print "--------------cccccccccccccccccccccccccc------------------ OLD PLAN"
         else:
+	    print "--------------cccccccccccccccccccccccccc------------------ NEW PLAN"
             return super(Plan, cls).__new__(cls, kernel, iset, *args,
                                             **kwargs)
 
@@ -300,6 +302,7 @@ class Plan(core.op_plan):
         key = Plan._cache_key(iset, ps, *args)
         _plan_cache[key] = self
         self._cached = True
+        print "--------------cccccccccccccccccccccccccc------------------ INIT PLAN"
 
     @classmethod
     def _cache_key(cls, iset, partition_size, *args):

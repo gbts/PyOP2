@@ -19,6 +19,14 @@
 }
 {%- endmacro -%}
 
+{%- macro staginginextr(arg) -%}
+  for (i_1 = get_local_id(0); i_1 < {{ arg._size_name }} * {{ arg.data.cdim }}; i_1 += get_local_size(0)) {
+    for (j = 0; j < {{ parloop._it_space.layers }} * {{ arg.data.cdim }}; j++){
+  {{ arg._shared_name }}[i_1] = {{ arg._name }}[i_1 % {{ arg.data.cdim }} + {{ arg._map_name }}[i_1 / {{ arg.data.cdim }}] * {{ arg.data.cdim }}];
+  }
+}
+{%- endmacro -%}
+
 {%- macro stagingout(arg) -%}
   for (i_1 = get_local_id(0); i_1 < {{ arg._size_name }} * {{ arg.data.cdim }}; i_1 += get_local_size(0)) {
   {{ arg.data.name }}[i_1 % {{ arg.data.cdim }} + {{ arg._map_name }}[i_1 / {{ arg.data.cdim }}] * {{ arg.data.cdim }}] = {{ arg._shared_name }}[i_1];
@@ -76,7 +84,7 @@ for (i_2 = 0; i_2 < {{ arg.data.cdim }}; ++i_2) {
 }
 {%- endmacro -%}
 
-{%- macro work_group_reduction(arg) -%}
+{%- macro work_group_rreduction_kerneleduction(arg) -%}
   for (i_1 = get_local_id(0); i_1 < {{ arg._size_name }} * {{ arg.data.cdim }}; i_1 += get_local_size(0)) {
   {{ arg.data.name }}[i_1 % {{ arg.data.cdim }} + {{ arg._map_name }}[i_1 / {{ arg.data.cdim }}] * {{ arg.data.cdim }}] += {{ arg._shared_name }}[i_1];
 }
@@ -129,6 +137,11 @@ void {{ parloop._stub_name }}(
   __global int* p_nelems,
   __global int* p_nthrcol,
   __global int* p_thrcol,
+  {%- if(parloop._it_space.layers > 1) %}
+    {%- for arg in parloop._unique_dat_args %}
+  __global int* {{ arg._name }}_off,
+    {%- endfor -%}
+  {%- endif %}
   __private int block_offset
 ) {
   __local char shared [{{ launch.local_memory_size }}] __attribute__((aligned(sizeof(long))));
@@ -139,6 +152,7 @@ void {{ parloop._stub_name }}(
   int block_id;
 
   int i_1;
+  int k;
 
 {%- if(parloop._unique_indirect_dat_args) %}
 {%- if(parloop._all_inc_indirect_dat_args) %}
@@ -225,7 +239,11 @@ void {{ parloop._stub_name }}(
 {% if(parloop._unique_read_or_rw_indirect_dat_args) -%}
   // staging in of indirect dats
   {% for arg in parloop._unique_read_or_rw_indirect_dat_args %}
+  {%- if parloop._it_space.layers > 1 %}
+  {{ staginginextr(arg) }}
+  {%- else %}
   {{ stagingin(arg) }}
+  {%- endif %}
   {% endfor %}
   barrier(CLK_LOCAL_MEM_FENCE);
 {% endif %}

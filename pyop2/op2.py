@@ -85,6 +85,9 @@ class Global(base.Global):
 class Map(base.Map):
     __metaclass__ = backends._BackendSelectorWithH5
 
+class Map2(base.Map2):
+    __metaclass__ = backends._BackendSelectorWithH5
+
 class Sparsity(base.Sparsity):
     __metaclass__ = backends._BackendSelector
 

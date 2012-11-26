@@ -141,6 +141,28 @@ class Map(base.Map):
             raise DimTypeError("Unrecognised dimension value %s" % dim)
         return cls(iterset, dataset, dim[0], values, name)
 
+class Map2(base.Map2):
+    """OP2 map, a relation between two :class:`Set` objects."""
+
+    _arg_type = Arg
+
+    @property
+    def _c_handle(self):
+        if self._lib_handle is None:
+            self._lib_handle = core.op_map(self)
+        return self._lib_handle
+
+    @classmethod
+    def fromhdf5(cls, iterset, dataset, f, name):
+        slot = f[name]
+        values = slot.value
+        dim = slot.shape[1:]
+        if len(dim) != 1:
+            raise DimTypeError("Unrecognised dimension value %s" % dim)
+        return cls(iterset, dataset, dim[0], values, name)
+
+
+
 _sparsity_cache = dict()
 def _empty_sparsity_cache():
     _sparsity_cache.clear()

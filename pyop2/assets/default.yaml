@@ -4,5 +4,5 @@ backend: sequential
 debug: 0
 
 # codegen
-dump-gencode: false
+dump-gencode: True
 dump-gencode-path: /tmp/%(kernel)s-%(time)s.cl.c
