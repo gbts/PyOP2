@@ -392,6 +392,24 @@ class Map(op2.Map):
                  self)
             self._off_device_values.set(self.off, _queue)
 
+    def _elem_off_to_device(self):
+        if not hasattr(self, '_elem_off_device_values'):
+            self._elem_off_device_values = array.to_device(_queue, self.elem_offsets)
+        else:
+            from warnings import warn
+            warn("Copying Map OFFSET data for %s again, do you really want to do this?" % \
+                 self)
+            self._elem_off_device_values.set(self.elem_offsets, _queue)
+
+    def _elem_sizes_to_device(self):
+        if not hasattr(self, '_elem_sizes_device_values'):
+            self._elem_sizes_device_values = array.to_device(_queue, self.elem_sizes)
+        else:
+            from warnings import warn
+            warn("Copying Map OFFSET data for %s again, do you really want to do this?" % \
+                 self)
+            self._elem_sizes_device_values.set(self.elem_sizes, _queue)
+
 class Plan(op2.Plan):
     @property
     def ind_map(self):
@@ -589,7 +607,8 @@ class ParLoop(op2.ParLoop):
         #do codegen
         user_kernel = instrument_user_kernel()
         template = _jinja2_direct_loop if self._is_direct \
-                                       else _jinja2_indirect_loop
+                                       else _jinja2_indirect_loop_sol4
+
 
         self._src = template.render({'parloop': self,
                                      'user_kernel': user_kernel,
@@ -598,6 +617,7 @@ class ParLoop(op2.ParLoop):
                                      'op2const': Const._definitions()
                                  }).encode("ascii")
         self.dump_gen_code()
+        #op2._parloop_cache[key] = self._src
 
     def compute(self):
         if self._has_soa:
@@ -690,7 +710,19 @@ class ParLoop(op2.ParLoop):
                 for arg in self.args:
                     if not arg._is_mat and arg._is_vec_map:
                         arg.map._off_to_device()
-                        kernel.append_arg(arg.map._off_device_values.data)
+                        self._fun.append_arg(arg.map._off_device_values.data)
+
+            if self._it_space.layers > 1:
+               for arg in self.args:
+                    if not arg._is_mat and arg._is_vec_map:
+                        arg.map._elem_off_to_device()
+                        self._fun.append_arg(arg.map._elem_off_device_values.data)
+
+            if self._it_space.layers > 1:
+               for arg in self.args:
+                    if not arg._is_mat and arg._is_vec_map:
+                        arg.map._elem_sizes_to_device()
+                        self._fun.append_arg(arg.map._elem_sizes_device_values.data)
 
             block_offset = 0
             for i in range(self._plan.ncolors):
@@ -702,6 +734,7 @@ class ParLoop(op2.ParLoop):
                 cl.enqueue_nd_range_kernel(_queue, self._fun, (int(thread_count),), (int(threads_per_block),), g_times_l=False).wait()
                 block_offset += blocks_per_grid
 
+        #print "--> 7 <--"
         # mark !READ data as dirty
         for arg in self.args:
             if arg.access is not READ:
@@ -792,3 +825,5 @@ _reduction_task_cache = None
 _jinja2_env = Environment(loader=PackageLoader("pyop2", "assets"))
 _jinja2_direct_loop = _jinja2_env.get_template("opencl_direct_loop.jinja2")
 _jinja2_indirect_loop = _jinja2_env.get_template("opencl_indirect_loop.jinja2")
+_jinja2_indirect_loop_sol3 = _jinja2_env.get_template("opencl_indirect_loop_sol3.jinja2")
+_jinja2_indirect_loop_sol4 = _jinja2_env.get_template("opencl_indirect_loop_sol4.jinja2")

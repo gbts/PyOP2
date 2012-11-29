@@ -264,7 +264,7 @@ class Global(DeviceDataMixin, op2.Global):
         self.state = DeviceDataMixin.DEVICE_UNALLOCATED
 
 class Map(op2.Map):
-    def __init__(self, iterset, dataset, dim, values=None, name=None, off=None):
+    def __init__(self, iterset, dataset, dim, values=None, name=None, off=None, dimChange=None, elem_offsets=None, elem_sizes=None):
         # The op2.Map base class allows not passing values. We do not allow
         # that on the device, but want to keep the API consistent. So if the
         # user doesn't pass values, we fail with MapValueError rather than
@@ -272,7 +272,7 @@ class Map(op2.Map):
         # additional parameters
         if values is None:
             raise MapValueError("Map values must be populated.")
-        op2.Map.__init__(self, iterset, dataset, dim, values, name, off)
+        op2.Map.__init__(self, iterset, dataset, dim, values, name, off, dimChange, elem_offsets, elem_sizes)
 
     def _to_device(self):
         raise RuntimeError("Abstract device class can't do this")
@@ -329,6 +329,7 @@ class Plan(core.op_plan):
 
         _plan_cache[key] = self
         self._cached = True
+
 
     @classmethod
     def _cache_key(cls, iset, partition_size, matrix_coloring, *args):
