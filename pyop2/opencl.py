@@ -79,8 +79,8 @@ class Kernel(op2.Kernel):
                 self.visit(node.decl)
 
         def visit_ParamList(self, node):
-	    print self._instrument
-	    print node.params
+	    #print self._instrument
+	    #print node.params
 	    #print "PARAM: params = %d " % len(node.params)
             for i, p in enumerate(node.params):
 	        #print self._instrument[i][0]
@@ -417,6 +417,24 @@ class Map(op2.Map):
                  self)
             self._off_device_values.set(self.off, queue=_queue)
 
+    def _elem_off_to_device(self):
+        if not hasattr(self, '_elem_off_device_values'):
+            self._elem_off_device_values = array.to_device(_queue, self.elem_offsets)
+        else:
+            from warnings import warn
+            warn("Copying Map OFFSET data for %s again, do you really want to do this?" % \
+                 self)
+            self._elem_off_device_values.set(self.elem_offsets, queue=_queue)
+
+    def _elem_sizes_to_device(self):
+        if not hasattr(self, '_elem_sizes_device_values'):
+            self._elem_sizes_device_values = array.to_device(_queue, self.elem_sizes)
+        else:
+            from warnings import warn
+            warn("Copying Map OFFSET data for %s again, do you really want to do this?" % \
+                 self)
+            self._elem_sizes_device_values.set(self.elem_sizes, queue=_queue)
+
 class Plan(op2.Plan):
     @property
     def ind_map(self):
@@ -539,7 +557,7 @@ class ParLoop(op2.ParLoop):
         max_bytes = sum(map(lambda a: a.data._bytes_per_elem, self._all_indirect_args))
         if layers > 1:
 	  max_bytes *= layers
-	  print "max bytes for 3D case = %d " % max_bytes
+	  #print "max bytes for 3D case = %d " % max_bytes
         #returns the number of elements in a partition
         return available_local_memory / (2 * _warpsize * max_bytes) * (2 * _warpsize)
 
@@ -551,7 +569,7 @@ class ParLoop(op2.ParLoop):
                 wgs = _max_work_group_size
             else:
                 # 16bytes local mem used for global / local indices and sizes
-                # (4/8)ptr bytes for each dat buffer passed to the kernel
+                # (4/8)ptr bytes for each dat buffer passed to815 the kernel
                 # (4/8)ptr bytes for each temporary global reduction buffer passed to the kernel
                 # 7: 7bytes potentialy lost for aligning the shared memory buffer to 'long'
                 warnings.warn('temporary fix to available local memory computation (-512)')
@@ -614,7 +632,8 @@ class ParLoop(op2.ParLoop):
         #do codegen
         user_kernel = instrument_user_kernel()
         template = _jinja2_direct_loop if self._is_direct \
-                                       else _jinja2_indirect_loop
+                                       else _jinja2_indirect_loop_sol4
+
 
         self._src = template.render({'parloop': self,
                                      'user_kernel': user_kernel,
@@ -623,451 +642,17 @@ class ParLoop(op2.ParLoop):
                                      'op2const': Const._definitions()
                                  }).encode("ascii")
         self.dump_gen_code()
-        print "##################################################################################### START"
+        #print "##################################################################################### START"
         print self._src
-        print "##################################################################################### END"
+        #print "##################################################################################### END"
 
 
-        ##FOR GPU
-        self._src = """
-/* Launch configuration:
- *   work group size     : 1
- *   partition size      : 1
- *   local memory size   : 256
- *   local memory offset :
- *   warpsize            : 1
- */
 
-#if defined(cl_khr_fp64)
-#if defined(cl_amd_fp64)
-#pragma OPENCL EXTENSION cl_amd_fp64 : enable
-#else
-#pragma OPENCL EXTENSION cl_khr_fp64 : enable
-#endif
-#elif defined(cl_amd_fp64)
-#pragma OPENCL EXTENSION cl_amd_fp64 : enable
-#endif
 
-#define ROUND_UP(bytes) (((bytes) + 15) & ~15)
-#define OP_WARPSIZE 1
-#define OP2_STRIDE(arr, idx) ((arr)[op2stride * (idx)])
-
-__kernel
-void g_reduction_kernel (
-  __global double *reduction_result,
-  __private double input_value,
-  __local double *reduction_tmp_array
-) {
-  barrier(CLK_LOCAL_MEM_FENCE);
-  int lid = get_local_id(0);
-  reduction_tmp_array[lid] = input_value;
-  barrier(CLK_LOCAL_MEM_FENCE);
-
-  for(int offset = 1; offset < (int)get_local_size(0); offset <<= 1) {
-    int mask = (offset << 1) - 1;
-    if(((lid & mask) == 0) && (lid + offset < (int)get_local_size(0))) {
-      reduction_tmp_array[lid] += reduction_tmp_array[lid + offset];
-    }
-    barrier(CLK_LOCAL_MEM_FENCE);
-  }
-
-  if (lid == 0)
-    *reduction_result = reduction_tmp_array[0];
-}
-
-
-void comp_vol(__private double A[1], __local double *x[], __local double *y[], __private int j);
-void comp_vol(__private double A[1], __local double *x[], __local double *y[], __private int j)
-{
-  for (int i = 0; i < 6; i++)
-  {
-    A[0] += x[i][0] + y[i][0];
-  }
-
-  for (int i = 0; i < 0; i++)
-  {
-    A[0] += x[i][1] + y[i][1];
-  }
-
-}
-
-
-__kernel
-__attribute__((reqd_work_group_size(10, 1, 1)))
-void __comp_vol_stub(
-  __global double* coords,
-  __global double* speed,
-  __global double* g,
-  int set_size,
-  __global int* p_ind_map,
-  __global short *p_loc_map,
-  __global int* p_ind_sizes,
-  __global int* p_ind_offsets,
-  __global int* p_blk_map,
-  __global int* p_offset,
-  __global int* p_nelems,
-  __global int* p_nthrcol,
-  __global int* p_thrcol,
-  __private int block_offset
-) {
-  __local char shared [2560] __attribute__((aligned(sizeof(long))));
-  __local int shared_memory_offset;
-  __local int active_threads_count;
-
-  int nbytes;
-  int block_id;
-
-  int i_1;
-  int j;
-  int k;
-
-  // reduction args
-  // global reduction local declarations
-
-  double g_reduction_local[1];
-
-  // shared indirection mappings
-  __global int* __local coords_map;
-  __local int coords_size;
-  __local double* __local coords_shared;
-  __global int* __local speed_map;
-  __local int speed_size;
-  __local double* __local speed_shared;
-
-  __local double* coords_vec[6];
-  __local double* speed_vec[6];
-  __local double* coords_vec2[6];
-  __local double* speed_vec2[6];
-  __local int off[15] = {1,1,1 ,1,1,1, 1,1,1, 1,1,1, 1,1,1};
-
-  //printf(" --------------------------------------------------------------- START %d \\n",get_local_id(0));
-
-  if (get_local_id(0) == 0) {
-    block_id = p_blk_map[get_group_id(0) + block_offset];
-    active_threads_count = p_nelems[block_id];
-    shared_memory_offset = p_offset[block_id];
-    //printf("shared_memory_offset = %d \\n",shared_memory_offset);
-    coords_size = p_ind_sizes[0 + block_id * 2];
-    //printf(" coords_size = %d \\n", coords_size);
-    coords_map = &p_ind_map[0 * set_size] + p_ind_offsets[0 + block_id * 2];
-    speed_size = p_ind_sizes[1 + block_id * 2];
-    //printf(" speed_size = %d \\n", speed_size);
-    speed_map = &p_ind_map[6 * set_size] + p_ind_offsets[1 + block_id * 2];
-
-    //printf(" coords_map = %d %d %d %d %d %d\\n", coords_map[0],coords_map[1],coords_map[2],coords_map[3],coords_map[4],coords_map[5]);
-    //printf(" speed_map = %d %d %d %d %d %d\\n", speed_map[0],speed_map[1],speed_map[2],speed_map[3],speed_map[4],speed_map[5]);
-    //printf("local size = %d \\n", get_local_size(0));
-
-    nbytes = 0;
-    coords_shared = (__local double*) (&shared[nbytes]);
-    nbytes += ROUND_UP(coords_size * 1 * sizeof(double) * 10);
-    speed_shared = (__local double*) (&shared[nbytes]);
-    nbytes += ROUND_UP(speed_size * 1 * sizeof(double) * 10);
-  }
-
-  barrier(CLK_LOCAL_MEM_FENCE);
-  //printf(" Step 1 <---> %d \\n",get_local_id(0));
-
-// staging in of indirect dats
-
-  // DO BETTER HERE BY NOT COPYING THE +1 DOFS
-  // AS THEY ARE ALREADY PART OF THE COLUMN THAT IS BEING COPIED.
-  // THIS APPLIES TO THE DOFS THAT ARE MIRRORRED DOFS NOT TO THE DOFS THAT ARE INTER LAYERS
-
-  for (i_1 = get_local_id(0); i_1 < coords_size * 1; i_1 += get_local_size(0)) {
-   for (j = 0; j < 10; j++){
-    coords_shared[i_1*10 + j] = coords[coords_map[i_1] + j];
-   }
-  }
-
-  for (i_1 = get_local_id(0); i_1 < speed_size * 1; i_1 += get_local_size(0)) {
-   for (j = 0; j < 10; j++){
-    speed_shared[i_1*10 + j] = speed[speed_map[i_1] + j];
-   }
-  }
-
-  //printf(" Step 2 <---> %d \\n",get_local_id(0));
-  barrier(CLK_LOCAL_MEM_FENCE);
-
-  // zeroing private memory for global reduction
-
-  for (i_1 = 0; i_1 < 1; ++i_1) {
-    g_reduction_local[i_1] = 0.0;
-}
-
-
-  for (i_1 = get_local_id(0); i_1 < active_threads_count; i_1 += get_local_size(0)) { // 1 = number of threads
-      //printf(" set_size = %d \\n", shared_memory_offset);
-      //printf(" loc_map = %d %d %d %d %d %d\\n", p_loc_map[0],p_loc_map[1],p_loc_map[2],p_loc_map[3],p_loc_map[4],p_loc_map[5]);
-      //printf(" loc_map = %d ", p_loc_map[i_1 + 0*set_size + shared_memory_offset]);
-      //printf(" %d ", p_loc_map[i_1 + 1*set_size + shared_memory_offset]);
-      //printf(" %d ", p_loc_map[i_1 + 2*set_size + shared_memory_offset]);
-      //printf(" %d ", p_loc_map[i_1 + 3*set_size + shared_memory_offset]);
-      //printf(" %d ", p_loc_map[i_1 + 4*set_size + shared_memory_offset]);
-      //printf(" %d \\n", p_loc_map[i_1 + 5*set_size + shared_memory_offset]);
-
-        // populate vec map
-      coords_vec[0] = &coords_shared[p_loc_map[i_1 + 0*set_size + shared_memory_offset] * 10];
-      coords_vec[1] = &coords_shared[p_loc_map[i_1 + 1*set_size + shared_memory_offset] * 10];
-      coords_vec[2] = &coords_shared[p_loc_map[i_1 + 2*set_size + shared_memory_offset] * 10];
-      coords_vec[3] = &coords_shared[p_loc_map[i_1 + 3*set_size + shared_memory_offset] * 10];
-      coords_vec[4] = &coords_shared[p_loc_map[i_1 + 4*set_size + shared_memory_offset] * 10];
-      coords_vec[5] = &coords_shared[p_loc_map[i_1 + 5*set_size + shared_memory_offset] * 10];
-
-        // populate vec map
-      speed_vec[0] = &speed_shared[p_loc_map[i_1 + 6*set_size + shared_memory_offset] * 10];
-      speed_vec[1] = &speed_shared[p_loc_map[i_1 + 7*set_size + shared_memory_offset] * 10];
-      speed_vec[2] = &speed_shared[p_loc_map[i_1 + 8*set_size + shared_memory_offset] * 10];
-      speed_vec[3] = &speed_shared[p_loc_map[i_1 + 9*set_size + shared_memory_offset] * 10];
-      speed_vec[4] = &speed_shared[p_loc_map[i_1 + 10*set_size + shared_memory_offset] * 10];
-      speed_vec[5] = &speed_shared[p_loc_map[i_1 + 11*set_size + shared_memory_offset] * 10];
-    }
-
-  barrier(CLK_LOCAL_MEM_FENCE);
-
-    for(k = 0; k<2; k++){
-      for (i_1 = get_local_id(0); i_1 < 10 && i_1 % 2 == k; i_1 += get_local_size(0)) {
-        //lid = i_1 % 10;
-        //gid = i_1 / 10;
-
-        for(j = 0; j<6; j++){
-	  coords_vec2[j] = coords_vec[j] + i_1*off[j];
-        }
-        for(j = 0; j<6; j++){
-	  speed_vec2[j] = speed_vec[j] + i_1*off[j];
-        }
-
-	comp_vol(
-	  g_reduction_local,
-	  coords_vec2,
-	  speed_vec2,
-	  i_1
-        );
-      }
-      barrier(CLK_LOCAL_MEM_FENCE);
-    }
-
-  for (i_1 = 0; i_1 < 1; ++i_1){
-      g_reduction_kernel(&g[i_1 + get_group_id(0) * 1], g_reduction_local[i_1], (__local double*) shared);
-  }
-
-//printf(" ----------------------------------------------------------------- STOP %d \\n",get_local_id(0));
-}
-        """
-
-
-
-
-
-
-
-       ## FOR CPU
-        self._src = """
-/* Launch configuration:
- *   work group size     : 1
- *   partition size      : 1
- *   local memory size   : 256
- *   local memory offset :
- *   warpsize            : 1
- */
-
-#if defined(cl_khr_fp64)
-#if defined(cl_amd_fp64)
-#pragma OPENCL EXTENSION cl_amd_fp64 : enable
-#else
-#pragma OPENCL EXTENSION cl_khr_fp64 : enable
-#endif
-#elif defined(cl_amd_fp64)
-#pragma OPENCL EXTENSION cl_amd_fp64 : enable
-#endif
-
-#define ROUND_UP(bytes) (((bytes) + 15) & ~15)
-#define OP_WARPSIZE 1
-#define OP2_STRIDE(arr, idx) ((arr)[op2stride * (idx)])
-
-__kernel
-void g_reduction_kernel (
-  __global double *reduction_result,
-  __private double input_value,
-  __local double *reduction_tmp_array
-) {
-  barrier(CLK_LOCAL_MEM_FENCE);
-  int lid = get_local_id(0);
-  reduction_tmp_array[lid] = input_value;
-  barrier(CLK_LOCAL_MEM_FENCE);
-
-  for(int offset = 1; offset < (int)get_local_size(0); offset <<= 1) {
-    int mask = (offset << 1) - 1;
-    if(((lid & mask) == 0) && (lid + offset < (int)get_local_size(0))) {
-      reduction_tmp_array[lid] += reduction_tmp_array[lid + offset];
-    }
-    barrier(CLK_LOCAL_MEM_FENCE);
-  }
-
-  if (lid == 0)
-    *reduction_result = reduction_tmp_array[0];
-}
-
-
-void comp_vol(__private double A[1], __local double *x[], __local double *y[], __private int j);
-void comp_vol(__private double A[1], __local double *x[], __local double *y[], __private int j){
-  for (int i = 0; i < 6; i++){
-    A[0] += x[i][0] + y[i][0];
-  }
-
-  for (int i = 0; i < 0; i++)
-  {
-    A[0] += x[i][1] + y[i][1];
-  }
-
-}
-
-
-__kernel
-__attribute__((reqd_work_group_size(30, 1, 1)))
-void __comp_vol_stub(
-  __global double* coords,
-  __global double* speed,
-  __global double* g,
-  int set_size,
-  __global int* p_ind_map,
-  __global short *p_loc_map,
-  __global int* p_ind_sizes,
-  __global int* p_ind_offsets,
-  __global int* p_blk_map,
-  __global int* p_offset,
-  __global int* p_nelems,
-  __global int* p_nthrcol,
-  __global int* p_thrcol,
-  __global int* coords_off,
-  __global int* speed_off,
-  __private int block_offset
-) {
-  __local char shared [2000] __attribute__((aligned(sizeof(long))));
-  __local int shared_memory_offset;
-  __local int active_threads_count;
-
-  int nbytes;
-  int block_id;
-
-  int i_1;
-  int j;
-  int k;
-
-  // reduction args
-  // global reduction local declarations
-
-  double g_reduction_local[1];
-
-  // shared indirection mappings
-  __global int* __local coords_map;
-  __local int coords_size;
-  __local double* __local coords_shared;
-  __global int* __local speed_map;
-  __local int speed_size;
-  __local double* __local speed_shared;
-
-  __local double* coords_vec[6];
-  __local double* speed_vec[6];
-  __local double* coords_vec2[6];
-  __local double* speed_vec2[6];
-  __local int off[15] = {1,1,1 ,1,1,1, 1,1,1, 1,1,1, 1,1,1};
-
-  //printf(" --------------------------------------------------------------- START %d \\n",get_local_id(0));
-
-  if (get_local_id(0) == 0) {
-    block_id = p_blk_map[get_group_id(0) + block_offset];
-    active_threads_count = p_nelems[block_id];
-    shared_memory_offset = p_offset[block_id];
-    coords_size = p_ind_sizes[0 + block_id * 2];
-    coords_map = &p_ind_map[0 * set_size] + p_ind_offsets[0 + block_id * 2];
-    speed_size = p_ind_sizes[1 + block_id * 2];
-    speed_map = &p_ind_map[6 * set_size] + p_ind_offsets[1 + block_id * 2];
-
-    nbytes = 0;
-    coords_shared = (__local double*) (&shared[nbytes]);
-    nbytes += ROUND_UP(coords_size * 1 * sizeof(double) * 10);
-    speed_shared = (__local double*) (&shared[nbytes]);
-    nbytes += ROUND_UP(speed_size * 1 * sizeof(double) * 10);
-  }
-
-  barrier(CLK_LOCAL_MEM_FENCE);
-
-// staging in of indirect dats
-
-  // DO BETTER HERE BY NOT COPYING THE +1 DOFS
-  // AS THEY ARE ALREADY PART OF THE COLUMN THAT IS BEING COPIED.
-  // THIS APPLIES TO THE DOFS THAT ARE MIRRORRED DOFS NOT TO THE DOFS THAT ARE INTER LAYERS
-
-
-  for (i_1 = get_local_id(0); i_1 < coords_size * 1; i_1 += get_local_size(0)) {
-   for (j = 0; j < 10; j++){ //10 * dim
-    coords_shared[i_1*10 + j] = coords[coords_map[i_1] + j];
-   }
-  }
-
-  for (i_1 = get_local_id(0); i_1 < speed_size * 1; i_1 += get_local_size(0)) {
-   for (j = 0; j < 10; j++){
-    speed_shared[i_1*10 + j] = speed[speed_map[i_1] + j];
-   }
-  }
-
-  barrier(CLK_LOCAL_MEM_FENCE);
-
-  // zeroing private memory for global reduction
-
-  for (i_1 = 0; i_1 < 1; ++i_1) {
-    g_reduction_local[i_1] = 0.0;
-}
-
-
-  for (i_1 = get_local_id(0); i_1 < active_threads_count; i_1 += get_local_size(0)) {
-        // populate vec map
-      coords_vec[0] = &coords_shared[p_loc_map[i_1 + 0*set_size + shared_memory_offset] * 10]; // *10 * dim
-      coords_vec[1] = &coords_shared[p_loc_map[i_1 + 1*set_size + shared_memory_offset] * 10];
-      coords_vec[2] = &coords_shared[p_loc_map[i_1 + 2*set_size + shared_memory_offset] * 10];
-      coords_vec[3] = &coords_shared[p_loc_map[i_1 + 3*set_size + shared_memory_offset] * 10];
-      coords_vec[4] = &coords_shared[p_loc_map[i_1 + 4*set_size + shared_memory_offset] * 10];
-      coords_vec[5] = &coords_shared[p_loc_map[i_1 + 5*set_size + shared_memory_offset] * 10];
-
-        // populate vec map
-      speed_vec[0] = &speed_shared[p_loc_map[i_1 + 6*set_size + shared_memory_offset] * 10];
-      speed_vec[1] = &speed_shared[p_loc_map[i_1 + 7*set_size + shared_memory_offset] * 10];
-      speed_vec[2] = &speed_shared[p_loc_map[i_1 + 8*set_size + shared_memory_offset] * 10];
-      speed_vec[3] = &speed_shared[p_loc_map[i_1 + 9*set_size + shared_memory_offset] * 10];
-      speed_vec[4] = &speed_shared[p_loc_map[i_1 + 10*set_size + shared_memory_offset] * 10];
-      speed_vec[5] = &speed_shared[p_loc_map[i_1 + 11*set_size + shared_memory_offset] * 10];
-
-
-      for (i_1 =0; i_1 < 10; i_1 += 1) {
-
-        for(j = 0; j<6; j++){
-	  coords_vec[j] += i_1*off[j];
-        }
-        for(j = 0; j<6; j++){
-	  speed_vec[j] += i_1*off[j];
-        }
-
-	comp_vol(
-	  g_reduction_local,
-	  coords_vec,
-	  speed_vec,
-	  i_1
-        );
-      }
-  }
-
-  barrier(CLK_LOCAL_MEM_FENCE);
-
-  for (i_1 = 0; i_1 < 1; ++i_1){
-      g_reduction_kernel(&g[i_1 + get_group_id(0) * 1], g_reduction_local[i_1], (__local double*) shared);
-  }
-}
-        """
         op2._parloop_cache[key] = self._src
 
     def compute(self):
-        print "--> 1 <--"
+        #print "--> 1 <--"
         if self._has_soa:
             op2stride = Const(1, self._it_space.size, name='op2stride',
                               dtype='int32')
@@ -1077,12 +662,14 @@ void __comp_vol_stub(
 
         conf = self.launch_configuration(self._it_space.layers)
         #print "part size = %d" % conf['partition_size']
-        print "--> 2 <--"
+        #print "--> 2 <--"
         if self._is_indirect:
 	    if self._it_space.layers > 1:
 		#extruded case
 		#conf['partition_size'] = conf['partition_size'] #/ (self._it_space.layers - 1)
 		#print "number of cols per partition = %d" % conf['partition_size']
+
+		##this is the condition that has to be met for the Solution 3
 		#conf['partition_size'] = 1 # for test purposes - so just 1 column
 
 		self._plan = Plan(self.kernel, self._it_space.iterset,
@@ -1102,12 +689,12 @@ void __comp_vol_stub(
 		conf['work_group_size'] = min(_max_work_group_size,conf['partition_size'])
 		conf['work_group_count'] = self._plan.nblocks
         conf['warpsize'] = _warpsize
-        print "--> 3 <--"
+        #print "--> 3 <--"
         #print self._it_space.layers
         self.codegen(conf)
-        print "--> 4 <--"
+        #print "--> 4 <--"
         kernel = compile_kernel()
-	print "--> 5 <--"
+	#print "--> 5 <--"
         for arg in self._unique_args:
             arg.data._allocate_device()
             if arg.access is not op2.WRITE:
@@ -1135,7 +722,7 @@ void __comp_vol_stub(
         for m in self._matrix_entry_maps:
             m._to_device()
             kernel.append_arg(m._device_values.data)
-	print "--> 6 <--"
+	#print "--> 6 <--"
         if self._is_direct:
             kernel.append_arg(np.int32(self._it_space.size))
 
@@ -1162,21 +749,41 @@ void __comp_vol_stub(
 		  #myarray.set(_queue, arg.map.off)
 		  kernel.append_arg(arg.map._off_device_values.data)
 
+	    if self._it_space.layers > 1:
+	      for arg in self.args:
+		if not arg._is_mat and arg._is_vec_map:
+		  #print type(arg.map.off)
+		  #print self._plan.ind_offs.data
+		  arg.map._elem_off_to_device()
+		  #myarray = array.to_device(_queue, arg.map.off)
+		  #myarray.set(_queue, arg.map.off)
+		  kernel.append_arg(arg.map._elem_off_device_values.data)
+
+	    if self._it_space.layers > 1:
+	      for arg in self.args:
+		if not arg._is_mat and arg._is_vec_map:
+		  #print type(arg.map.off)
+		  #print self._plan.ind_offs.data
+		  arg.map._elem_sizes_to_device()
+		  #myarray = array.to_device(_queue, arg.map.off)
+		  #myarray.set(_queue, arg.map.off)
+		  kernel.append_arg(arg.map._elem_sizes_device_values.data)
+
             block_offset = 0
-            print self._plan.ncolors
-            print self._plan.ncolblk[0]
+            #print self._plan.ncolors
+            #print self._plan.ncolblk[0]
             for i in range(self._plan.ncolors):
                 blocks_per_grid = int(self._plan.ncolblk[i])
                 threads_per_block = min(_max_work_group_size, conf['partition_size'])
-                print threads_per_block
+                #print threads_per_block
                 thread_count = threads_per_block * blocks_per_grid
 
-		print block_offset
+		#print block_offset
                 kernel.set_last_arg(np.int32(block_offset))
                 cl.enqueue_nd_range_kernel(_queue, kernel, (int(thread_count),), (int(threads_per_block),), g_times_l=False).wait()
                 block_offset += blocks_per_grid
 
-	print "--> 7 <--"
+	#print "--> 7 <--"
         # mark !READ data as dirty
         for arg in self.args:
             if arg.access is not READ:
@@ -1186,7 +793,7 @@ void __comp_vol_stub(
 
         for mat in [arg.data for arg in self._matrix_args]:
             mat.assemble()
-	print "--> 8 <--"
+	#print "--> 8 <--"
         for a in self._all_global_reduction_args:
             a.data._post_kernel_reduction_task(conf['work_group_count'], a.access)
 
@@ -1262,3 +869,5 @@ _reduction_task_cache = None
 _jinja2_env = Environment(loader=PackageLoader("pyop2", "assets"))
 _jinja2_direct_loop = _jinja2_env.get_template("opencl_direct_loop.jinja2")
 _jinja2_indirect_loop = _jinja2_env.get_template("opencl_indirect_loop.jinja2")
+_jinja2_indirect_loop_sol3 = _jinja2_env.get_template("opencl_indirect_loop_sol3.jinja2")
+_jinja2_indirect_loop_sol4 = _jinja2_env.get_template("opencl_indirect_loop_sol4.jinja2")

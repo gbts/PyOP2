@@ -21,8 +21,8 @@
 
 {%- macro staginginextr(arg) -%}
   for (i_1 = get_local_id(0); i_1 < {{ arg._size_name }} * {{ arg.data.cdim }}; i_1 += get_local_size(0)) {
-    for (j = 0; j < ({{ parloop._it_space.layers }} - 1); j++){
-  {{ arg._shared_name }}[i_1 * ({{ parloop._it_space.layers }} - 1) + j ] = {{ arg._name }}[{{ arg._map_name }}[i_1] + j];
+    for (j = 0; j < ({{ parloop._it_space.layers }} - 1) * {{ arg._name }}_off[i_1]; j++){
+  {{ arg._shared_name }}[i_1 * ({{ parloop._it_space.layers }} - 1) * {{ arg._name }}_off[i_1] + j ] = {{ arg._name }}[{{ arg._map_name }}[i_1] + j];
   }
 }
 {%- endmacro -%}
@@ -54,7 +54,7 @@
 {% endfor -%}
 {%- else -%}
 {%- for i in range(arg.map.dim) %}
-{{ arg._vec_name }}[{{ i }}] = &{{ arg._shared_name }}[p_loc_map[i_1 + {{arg._which_indirect + i}}*set_size + shared_memory_offset] * ({{ parloop._it_space.layers }} - 1)];
+{{ arg._vec_name }}[{{ i }}] = &{{ arg._shared_name }}[p_loc_map[i_1 + {{arg._which_indirect + i}}*set_size + shared_memory_offset] * ({{ parloop._it_space.layers }} - 1) * acc_off_{{ arg._name }}[{{i}}] ];
 {%- endfor -%}
 {%- endif -%}
 {%- endmacro -%}
@@ -164,9 +164,21 @@ void {{ parloop._stub_name }}(
   {%- endif %}
   __private int block_offset
 ) {
-  __local char shared [{{ launch.local_memory_size * 11 }}] __attribute__((aligned(sizeof(long))));
+  __local char shared [{{ (launch.local_memory_size + 100) * parloop._it_space.layers }}] __attribute__((aligned(sizeof(long))));
   __local int shared_memory_offset;
   __local int active_threads_count;
+
+  {% for arg in parloop._unique_dat_args %}
+  __local int acc_off_{{ arg._name }}[{{ arg.map.dim }}] = {  {%- set acc = 0 -%}
+							  {%- for i in arg.map.off -%}
+							  {{ acc }}
+							  {%- if not loop.last -%}
+							  ,
+							  {%- endif -%}
+							  {%- set acc = acc + i -%}
+							  {%- endfor -%}
+						      };
+  {% endfor %}
 
   int nbytes;
   int block_id;

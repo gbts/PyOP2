@@ -156,7 +156,7 @@ for i in range(0,lins): #for each cell to node mapping
   ns = mappp[i] - 1
   ns.sort()
   pairs = [(x,y) for x in ns for y in ns if x<y]
-  res = np.array([])
+  res = np.array([], dtype=np.int32)
   if addEdges:
     for x,y in pairs:
       ys = [kk for yy,kk in edg[x] if yy == y]
@@ -182,8 +182,6 @@ nums[1] = k #number of edges
 #for i in range(0,lins):
 #  mapp = np.append(mapp, np.append(mappp[i],i))
 #mapp = mapp.reshape(-1,7)
-
-
 
 ### construct the initial indeces ONCE
 ### construct the offset array ONCE
@@ -245,7 +243,7 @@ speed = op2.Dat(dofsSet, 1, dat, np.float64, "speed") #<------------------------
 t0ind= time.clock()
 ### THE MAP from the ind
 #create the map from element to dofs for each element in the 2D mesh
-ind = np.zeros(nums[2]*map_dofs)
+ind = np.zeros(nums[2]*map_dofs, dtype=np.int32)
 #ind = np.array([], dtype = np.int32) #<----------------------------------------------------<<
 #(lins,cols) = mapp.shape
 count = 0
@@ -259,7 +257,7 @@ for mm in range(0,lins):
 	for j in range(0, mesh2d[i]):
 	  m = mapp[mm][c]
 	  for k in range(0, len(A[d])):
-	    ind[count] = m*dofs[i][d]*(layers -1 - d) + A[d][k]*dofs[i][d] + offset
+	    ind[count] = m*dofs[i][d]*(layers - d) + A[d][k]*dofs[i][d] + offset
 	    count+=1
 	    #ind = np.append(ind, m*dofs[i][d]*(layers -1 - d) + A[d][k]*dofs[i][d] + offset)
 	  c+=1
@@ -276,6 +274,7 @@ ppp = nums[2]*map_dofs
 elem_dofs = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs",off); #<-------------------------------------------<<
 
 
+
 ### THE RESULT ARRAY
 # The result array
 #b_vals = np.asarray([0.0]*nums[2]*wedges, dtype=valuetype)
@@ -285,7 +284,7 @@ g = op2.Global(1, data=0.0, name='g')  #<---------------------------------------
 
 ### ADD LAYERS INFO TO ITERATION SET
 # the elements set must also contain the layers
-elements.setLayers(11)
+elements.setLayers(layers)
 
 #print "layers = %d" % elements.layers
 

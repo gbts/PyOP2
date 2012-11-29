@@ -91,7 +91,7 @@ mesh1d = np.array([2,1])
 A = np.array([[0,1],[0]])
 
 #the array of dof values for each element type
-dofs = np.array([[1,0],[0,0],[0,0]])
+dofs = np.array([[2,3],[0,0],[0,0]])
 
 #ALL the nodes, edges amd cells of the 2D mesh
 nums = np.array([nodes.size,0,elements.size])
@@ -111,14 +111,15 @@ noDofs = len(A[0])*noDofs[0] + noDofs[1]
 
 
 ### Number of elements in the map only counts the first reference to the dofs related to a mesh element
+### CHANGE
+### IT COUNTS ALL THE DOFS
 map_dofs = 0
 for d in range(0,2):
   for i in range(0,len(mesh2d)):
-    for j in range(0,mesh2d[i]*len(A[d])):
+    for j in range(0,mesh2d[i]):
       if dofs[i][d] != 0:
-	map_dofs += 1 #<----------------------------------------------------<<
+	map_dofs += 1
 print "The size of the dofs map is = %d" % map_dofs
-
 
 
 ### EXTRUSION DETAILS
@@ -175,6 +176,9 @@ for i in range(0,lins): #for each cell to node mapping
     mapp[i] = res
 
 nums[1] = k #number of edges
+
+print mapp[0]
+
 #print "nodes = %d" % nums[0]
 #print "elements = %d" % nums[2]
 #print "number of edges = %d" % nums[1]
@@ -192,10 +196,9 @@ off = np.array([], dtype = np.int32) #<-----------------------------------------
 for d in range(0,2): #for 2D and then for 3D
   for i in range(0,len(mesh2d)): # over [3,3,1]
     for j in range(0,mesh2d[i]):
-      for k in range(0,len(A[d])):
 	if dofs[i][d]!=0:
 	  off = np.append(off,dofs[i][d])
-#print off
+print off
 
 
 
@@ -212,16 +215,30 @@ no_dofs = np.dot(nums,dofs.transpose()[0])*layers + wedges * np.dot(dofs.transpo
 ###
 #print coords.data.size
 #dat = np.array([],dtype=np.float64)
-dat = np.zeros(np.dot(sum(np.dot(nums.reshape(1,3),dofs)),np.array([layers,layers-1])))
-#for d in range(0,2): #for 2D and then for 3D
-#  for i in range(0,len(mesh2d)): # over [3,3,1]
-#      for k in range(0,dofs[i][d]*nums[i]*(layers-d)):
-#	  dat = np.append(dat, 1.0)
+#dat = np.zeros(np.dot(sum(np.dot(nums.reshape(1,3),dofs)),np.array([layers,layers-1])))
+#compute the size of the data
+dat_size = 0
+for d in range(0,2):
+  for i in range(0,len(mesh2d)):
+    if dofs[i][d] != 0:
+      dat_size += nums[i];
+
+dat = np.empty(shape = (dat_size,),dtype=object)
+for i in range(0, len(dat)):
+  dat[i] = np.array([])
 
 t0dat = time.clock()
 count = 0
+
 for d in range(0,2): #for 2D and then for 3D
   for i in range(0,len(mesh2d)): # over [3,3,1]
+      for j in range(0, nums[i]):
+	for k in range(0, (layers)): ## FIXME: should be layers - d but I want to have the no. of dofs in the same position
+	  for l in rane (0, dofs[i][d]):
+	    dat[count] = np.append(dat[count], 0.0001 + 0.0001*l)
+	dat[count] = np.append(dat[count], dofs[i][d])
+	count+=1;
+
       for k in range(0, nums[i]*(layers-d)):
 	for l in range(0,dofs[i][d]):
 	  dat[count] = 0.0001 + l/1000
@@ -257,14 +274,14 @@ for mm in range(0,lins):
 	for j in range(0, mesh2d[i]):
 	  m = mapp[mm][c]
 	  for k in range(0, len(A[d])):
-	    ind[count] = m*dofs[i][d]*(layers - d) + A[d][k]*dofs[i][d] + offset
-	    count+=1
-	    #ind = np.append(ind, m*dofs[i][d]*(layers -1 - d) + A[d][k]*dofs[i][d] + offset)
+	      ind[count] = m*dofs[i][d]*(layers - d) + A[d][k]*dofs[i][d] + offset # FIXME: layers - 1 - d
+	      count+=1
+	      #ind = np.append(ind, m*dofs[i][d]*(layers -1 - d) + A[d][k]*dofs[i][d] + offset)
 	  c+=1
       elif dofs[i][1-d] != 0:
 	c+= mesh2d[i]
 
-      offset += dofs[i][d]*nums[i]*(layers - d)
+      offset += dofs[i][d]*nums[i]*(layers - d) #FIXME: layers - d
 
 tind = time.clock() - t0ind
 ppp = nums[2]*map_dofs
@@ -272,6 +289,8 @@ ppp = nums[2]*map_dofs
 #print "size of ind = %d" % ppp
 # Create the map from elements to dofs
 elem_dofs = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs",off); #<-------------------------------------------<<
+
+print ind[0]
 
 ### THE RESULT ARRAY
 # The result array
@@ -290,10 +309,10 @@ elements.setLayers(layers)
 ### CALL PAR LOOP
 # Compute volume
 tloop = 0
-##for j in range(0,10):
-t0loop= time.clock()
-    ##for i in range(0,100):
-op2.par_loop(mass, elements,
+for j in range(0,10):
+    t0loop= time.clock()
+    for i in range(0,100):
+	op2.par_loop(mass, elements,
              g(op2.INC),
              coords(elem_dofs, op2.READ),
              speed(elem_dofs, op2.READ))
