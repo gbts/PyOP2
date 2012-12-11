@@ -52,9 +52,17 @@ parser.add_argument('-m', '--mesh',
                     type=str,
                     required=True,
                     help='Base name of triangle mesh (excluding the .ele or .node extension)')
+
+parser.add_argument('-l', '--layers',
+                    action='store',
+                    type=str,
+                    required=True,
+                    help='Base name of triangle mesh (excluding the .ele or .node extension)')
+
 opt = vars(parser.parse_args())
 op2.init(**opt)
 mesh_name = opt['mesh']
+layers = int(opt['layers'])
 
 # Generate code for kernel
 mass = op2.Kernel("""
@@ -122,7 +130,7 @@ print "The size of the dofs map is = %d" % map_dofs
 
 
 ### EXTRUSION DETAILS
-layers = 11
+#layers = 11
 wedges = layers - 1
 
 ### NEW MAP
@@ -302,7 +310,7 @@ tloop += time.clock() - t0loop # t is CPU seconds elapsed (floating point)
 
 #print "dat constr %f s" % tdat
 #print "ind constr %f s" % tind
-tloop = tloop / 10
+ttloop = tloop / 10
 print nums[0], nums[1], nums[2], layers, tloop
 
 #print "Expected solution: %s" % b.data

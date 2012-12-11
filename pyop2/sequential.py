@@ -454,7 +454,9 @@ class ParLoop(rt.ParLoop):
                                        'extr_loop' : _extr_loop,
                                        'extr_loop_close' : _extr_loop_close}
 
-        #print code_to_compile
+
+	#code_to_compile =
+        print code_to_compile
         _fun = inline_with_numpy(code_to_compile, additional_declarations = kernel_code,
                                  additional_definitions = _const_decs + kernel_code,
                                  include_dirs=[OP2_INC],

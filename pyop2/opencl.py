@@ -404,8 +404,8 @@ class Map(op2.Map):
             self._device_values = array.to_device(_queue, self._values)
         else:
             from warnings import warn
-            warn("Copying Map data for %s again, do you really want to do this?" % \
-                 self)
+            #warn("Copying Map data for %s again, do you really want to do this?" % \
+            #     self)
             self._device_values.set(_queue, self._values)
 
     def _off_to_device(self):
@@ -413,8 +413,8 @@ class Map(op2.Map):
             self._off_device_values = array.to_device(_queue, self.off)
         else:
             from warnings import warn
-            warn("Copying Map OFFSET data for %s again, do you really want to do this?" % \
-                 self)
+            #warn("Copying Map OFFSET data for %s again, do you really want to do this?" % \
+            #     self)
             self._off_device_values.set(self.off, queue=_queue)
 
     def _elem_off_to_device(self):
@@ -422,8 +422,8 @@ class Map(op2.Map):
             self._elem_off_device_values = array.to_device(_queue, self.elem_offsets)
         else:
             from warnings import warn
-            warn("Copying Map OFFSET data for %s again, do you really want to do this?" % \
-                 self)
+            #warn("Copying Map OFFSET data for %s again, do you really want to do this?" % \
+            #     self)
             self._elem_off_device_values.set(self.elem_offsets, queue=_queue)
 
     def _elem_sizes_to_device(self):
@@ -431,8 +431,8 @@ class Map(op2.Map):
             self._elem_sizes_device_values = array.to_device(_queue, self.elem_sizes)
         else:
             from warnings import warn
-            warn("Copying Map OFFSET data for %s again, do you really want to do this?" % \
-                 self)
+            #warn("Copying Map OFFSET data for %s again, do you really want to do this?" % \
+            #     self)
             self._elem_sizes_device_values.set(self.elem_sizes, queue=_queue)
 
 class Plan(op2.Plan):
@@ -516,7 +516,7 @@ class ParLoop(op2.ParLoop):
     def _i_partition_size(self,layers=None):
         #TODO FIX: something weird here
         #available_local_memory
-        warnings.warn('temporary fix to available local memory computation (-512)')
+        #warnings.warn('temporary fix to available local memory computation (-512)')
         available_local_memory = _max_local_memory - 512
         # 16bytes local mem used for global / local indices and sizes
         available_local_memory -= 16
@@ -542,12 +542,6 @@ class ParLoop(op2.ParLoop):
         # inside shared memory padding
         available_local_memory -= 2 * (len(self._unique_indirect_dat_args) - 1)
 
-	#k = 0
-	#print len(self._all_indirect_args)
-	#for a in self._all_indirect_args:
-	#  k+=1
-	#  #print a
-	#  print k, a.data._bytes_per_elem
 
 	#extruded case:
 	#	1. The MAPS are flattened so for example for a map 1->10, 10 "args" are considered
@@ -556,8 +550,10 @@ class ParLoop(op2.ParLoop):
 	#	3. TODO: divide by the size of a column, return the number of columns in each partition
         max_bytes = sum(map(lambda a: a.data._bytes_per_elem, self._all_indirect_args))
         if layers > 1:
-	  max_bytes *= layers
-	  #print "max bytes for 3D case = %d " % max_bytes
+	  mm = 1
+	  for a in self._all_indirect_args:
+	    mm = max(mm, max(a.map.off))
+	  max_bytes *= self._it_space.layers * mm
         #returns the number of elements in a partition
         return available_local_memory / (2 * _warpsize * max_bytes) * (2 * _warpsize)
 
@@ -572,7 +568,7 @@ class ParLoop(op2.ParLoop):
                 # (4/8)ptr bytes for each dat buffer passed to815 the kernel
                 # (4/8)ptr bytes for each temporary global reduction buffer passed to the kernel
                 # 7: 7bytes potentialy lost for aligning the shared memory buffer to 'long'
-                warnings.warn('temporary fix to available local memory computation (-512)')
+                #warnings.warn('temporary fix to available local memory computation (-512)')
                 available_local_memory = _max_local_memory - 512
                 available_local_memory -= 16
                 available_local_memory -= (len(self._unique_dat_args) + len(self._all_global_non_reduction_args))\
@@ -642,17 +638,10 @@ class ParLoop(op2.ParLoop):
                                      'op2const': Const._definitions()
                                  }).encode("ascii")
         self.dump_gen_code()
-        #print "##################################################################################### START"
-        print self._src
-        #print "##################################################################################### END"
-
-
-
-
         op2._parloop_cache[key] = self._src
 
+
     def compute(self):
-        #print "--> 1 <--"
         if self._has_soa:
             op2stride = Const(1, self._it_space.size, name='op2stride',
                               dtype='int32')
@@ -661,14 +650,10 @@ class ParLoop(op2.ParLoop):
             return prg.__getattr__(self._stub_name)
 
         conf = self.launch_configuration(self._it_space.layers)
-        #print "part size = %d" % conf['partition_size']
-        #print "--> 2 <--"
+
         if self._is_indirect:
 	    if self._it_space.layers > 1:
 		#extruded case
-		#conf['partition_size'] = conf['partition_size'] #/ (self._it_space.layers - 1)
-		#print "number of cols per partition = %d" % conf['partition_size']
-
 		##this is the condition that has to be met for the Solution 3
 		#conf['partition_size'] = 1 # for test purposes - so just 1 column
 
@@ -676,7 +661,12 @@ class ParLoop(op2.ParLoop):
                               *self._unwound_args,
                               partition_size=conf['partition_size'])
 
-		conf['local_memory_size'] = self._plan.nshared
+                mm = 1
+		for a in self._all_indirect_args:
+		  mm = max(mm, max(a.map.off))
+		conf['local_memory_size'] = self._plan.nshared * self._it_space.layers * mm
+		if conf['local_memory_size'] > 30000: # TODO: make this more accurate
+		  conf['local_memory_size'] = 30000
 		conf['ninds'] = self._plan.ninds
 		conf['work_group_size'] = min(_max_work_group_size,conf['partition_size'])
 		conf['work_group_count'] = self._plan.nblocks
@@ -689,12 +679,11 @@ class ParLoop(op2.ParLoop):
 		conf['work_group_size'] = min(_max_work_group_size,conf['partition_size'])
 		conf['work_group_count'] = self._plan.nblocks
         conf['warpsize'] = _warpsize
-        #print "--> 3 <--"
-        #print self._it_space.layers
+
         self.codegen(conf)
-        #print "--> 4 <--"
+
         kernel = compile_kernel()
-	#print "--> 5 <--"
+
         for arg in self._unique_args:
             arg.data._allocate_device()
             if arg.access is not op2.WRITE:
@@ -722,7 +711,7 @@ class ParLoop(op2.ParLoop):
         for m in self._matrix_entry_maps:
             m._to_device()
             kernel.append_arg(m._device_values.data)
-	#print "--> 6 <--"
+
         if self._is_direct:
             kernel.append_arg(np.int32(self._it_space.size))
 
@@ -742,49 +731,31 @@ class ParLoop(op2.ParLoop):
             if self._it_space.layers > 1:
 	      for arg in self.args:
 		if not arg._is_mat and arg._is_vec_map:
-		  #print type(arg.map.off)
-		  #print self._plan.ind_offs.data
 		  arg.map._off_to_device()
-		  #myarray = array.to_device(_queue, arg.map.off)
-		  #myarray.set(_queue, arg.map.off)
 		  kernel.append_arg(arg.map._off_device_values.data)
 
-	    if self._it_space.layers > 1:
+	    if self._it_space.layers > 1 and arg.map.elem_offsets != None:
 	      for arg in self.args:
 		if not arg._is_mat and arg._is_vec_map:
-		  #print type(arg.map.off)
-		  #print self._plan.ind_offs.data
 		  arg.map._elem_off_to_device()
-		  #myarray = array.to_device(_queue, arg.map.off)
-		  #myarray.set(_queue, arg.map.off)
 		  kernel.append_arg(arg.map._elem_off_device_values.data)
 
-	    if self._it_space.layers > 1:
+	    if self._it_space.layers > 1 and arg.map.elem_sizes != None:
 	      for arg in self.args:
 		if not arg._is_mat and arg._is_vec_map:
-		  #print type(arg.map.off)
-		  #print self._plan.ind_offs.data
 		  arg.map._elem_sizes_to_device()
-		  #myarray = array.to_device(_queue, arg.map.off)
-		  #myarray.set(_queue, arg.map.off)
 		  kernel.append_arg(arg.map._elem_sizes_device_values.data)
 
             block_offset = 0
-            #print self._plan.ncolors
-            #print self._plan.ncolblk[0]
             for i in range(self._plan.ncolors):
                 blocks_per_grid = int(self._plan.ncolblk[i])
                 threads_per_block = min(_max_work_group_size, conf['partition_size'])
-                #print threads_per_block
                 thread_count = threads_per_block * blocks_per_grid
 
-		#print block_offset
                 kernel.set_last_arg(np.int32(block_offset))
                 cl.enqueue_nd_range_kernel(_queue, kernel, (int(thread_count),), (int(threads_per_block),), g_times_l=False).wait()
                 block_offset += blocks_per_grid
 
-	#print "--> 7 <--"
-        # mark !READ data as dirty
         for arg in self.args:
             if arg.access is not READ:
                 arg.data.state = DeviceDataMixin.DEVICE
@@ -793,7 +764,7 @@ class ParLoop(op2.ParLoop):
 
         for mat in [arg.data for arg in self._matrix_args]:
             mat.assemble()
-	#print "--> 8 <--"
+
         for a in self._all_global_reduction_args:
             a.data._post_kernel_reduction_task(conf['work_group_count'], a.access)
 
@@ -871,3 +842,4 @@ _jinja2_direct_loop = _jinja2_env.get_template("opencl_direct_loop.jinja2")
 _jinja2_indirect_loop = _jinja2_env.get_template("opencl_indirect_loop.jinja2")
 _jinja2_indirect_loop_sol3 = _jinja2_env.get_template("opencl_indirect_loop_sol3.jinja2")
 _jinja2_indirect_loop_sol4 = _jinja2_env.get_template("opencl_indirect_loop_sol4.jinja2")
+_jinja2_indirect_loop_sol4_nostage = _jinja2_env.get_template("opencl_indirect_loop_sol4_nostage.jinja2")

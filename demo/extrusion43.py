@@ -68,7 +68,7 @@ void comp_vol(double A[1], double *x[1], int j)
 mass = op2.Kernel("""
 void comp_vol(double A[1], double *x[], double *y[], int j)
 {
-  for(int i=0; i<12; i++){
+  for(int i=0; i<6; i++){
     A[0]+=x[i][0] + y[i][0];
   }
 
@@ -91,7 +91,7 @@ mesh1d = np.array([2,1])
 A = np.array([[0,1],[0]])
 
 #the array of dof values for each element type
-dofs = np.array([[1,1],[1,0],[0,0]])
+dofs = np.array([[1,0],[0,0],[0,0]])
 
 #ALL the nodes, edges amd cells of the 2D mesh
 nums = np.array([nodes.size,0,elements.size])
@@ -195,7 +195,7 @@ for d in range(0,2): #for 2D and then for 3D
       for k in range(0,len(A[d])):
 	if dofs[i][d]!=0:
 	  off = np.append(off,dofs[i][d])
-#print off
+print off
 
 
 

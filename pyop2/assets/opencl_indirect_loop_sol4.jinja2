@@ -37,6 +37,7 @@
        }
        if (k < {{ arg._name }}_offsets[j+c]){
 	  {{ arg._shared_name }}[i_1] = {{ arg._name }}[{{ arg._map_name }}[j] + k - {{ arg._name }}_offsets[j]];
+	  break;
        }
   }
 }
@@ -204,12 +205,13 @@ void {{ parloop._stub_name }}(
   {%- endif %}
   __private int block_offset
 ) {
-  __local char shared [{{ (launch.local_memory_size + 100) * parloop._it_space.layers }}] __attribute__((aligned(sizeof(long))));
+  __local char shared [{{ launch.local_memory_size }}] __attribute__((aligned(sizeof(long))));
   __local int shared_memory_offset;
   __local int active_threads_count;
 
   {% for arg in parloop._unique_dat_args %}
-  __local int {{arg._name}}_offsets[100];
+  {%- set x = launch.work_group_size * arg.map.off.size -%}
+  __local int {{arg._name}}_offsets[ {{ x }} ];
   {% endfor %}
 
   {% for arg in parloop._unique_dat_args %}
@@ -231,22 +233,23 @@ void {{ parloop._stub_name }}(
   int k;
   int j;
   int c;
+  int change;
 
   {%- if(parloop._it_space.layers > 1) %}
     {%- for arg in parloop._unique_dat_args %}
-  __local int {{ arg._name }}_offsets_size = 0;
+  __local int {{ arg._name }}_offsets_size;
     {%- endfor -%}
   {%- endif %}
 
   {%- if(parloop._it_space.layers > 1) %}
     {%- for arg in parloop._unique_dat_args %}
-  __local int {{ arg._name }}_total_values = 0;
+  __local int {{ arg._name }}_total_values;
     {%- endfor -%}
   {%- endif %}
 
   {%- if(parloop._it_space.layers > 1) %}
     {%- for arg in parloop._unique_dat_args %}
-  __local int {{ arg._name }}_offsets_dimChange = 0;
+  __local int {{ arg._name }}_offsets_dimChange;
     {%- endfor -%}
   {%- endif %}
 
@@ -326,6 +329,7 @@ void {{ parloop._stub_name }}(
     j = 0;
     i_1 = 0;
     k = 0;
+    change = 0;
     for(c = 0; c < {{ arg._size_name }}; c++){
       {{arg._name}}_offsets[k] = j;
       k++;
@@ -338,11 +342,15 @@ void {{ parloop._stub_name }}(
 	  k++;
 	  j += {{arg._name}}_elem_sizes[i_1] * {{ parloop._it_space.layers }};
       } else {
-	  if ({{ arg._map_name }}[c] == {{arg.map.dimChange}}){
-	    {{arg._name}}_offsets_dimChange = k;
+	  if ( change == 0 && {{ arg._map_name }}[c] >= {{arg.map.dimChange}}){
+	    {{arg._name}}_offsets_dimChange = k - 1;
+	    change = 1;
 	  }
 	  j += {{arg._name}}_elem_sizes[i_1] * ({{ parloop._it_space.layers}} - 1);
       }
+    }
+    if (change == 0){
+      {{arg._name}}_offsets_dimChange = k - 1;
     }
     {{arg._name}}_offsets[k] = j;
     {{arg._name}}_offsets_size = k;

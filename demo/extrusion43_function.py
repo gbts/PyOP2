@@ -58,32 +58,22 @@ parser.add_argument('-l', '--layers',
                     type=str,
                     required=True,
                     help='Base name of triangle mesh (excluding the .ele or .node extension)')
-
 opt = vars(parser.parse_args())
 op2.init(**opt)
 mesh_name = opt['mesh']
 layers = int(opt['layers'])
 
-
 # Generate code for kernel
-mass = op2.Kernel("""
-void comp_vol(double A[1], double *x[1], int j)
-{
-  for(int i=0; i<11; i++){
-    A[0]+=x[i][0];
-  }
-}""","comp_vol");
 
 mass = op2.Kernel("""
-void comp_vol(double A[1], double *x[], double *y[], int j)
+void comp_vol(double A[1], double *x[], int j)
 {
-  for(int i=0; i<6; i++){
-    A[0]+= x[i][0] + y[i][0];
-  }
-
-  for(int i=0; i<0; i++){
-    A[0]+= x[i][1] + y[i][1];
-  }
+    double abs = x[0][0]*(x[2][1]-x[4][1])+x[2][0]*(x[4][1]-x[0][1])+x[4][0]*(x[0][1]-x[2][1]);
+    if (abs < 0)
+      abs = abs * (-1.0);
+    A[0]+=0.5*abs*0.1;
+    //printf(" rez %f   acc %f \\n", 0.5*abs*0.1, A[0]);
+    //getchar();
 }""","comp_vol");
 
 
@@ -92,7 +82,7 @@ void comp_vol(double A[1], double *x[], double *y[], int j)
 
 valuetype=np.float64
 
-nodes, coords, elements, elem_node = read_triangle(mesh_name)
+nodes, coords, elements, elem_node = read_triangle(mesh_name) #<----------------------------------------------------<<
 
 #mesh data
 mesh2d = np.array([3,3,1])
@@ -100,7 +90,7 @@ mesh1d = np.array([2,1])
 A = np.array([[0,1],[0]])
 
 #the array of dof values for each element type
-dofs = np.array([[2,3],[0,0],[0,0]])
+dofs = np.array([[2,0],[0,0],[0,0]])
 
 #ALL the nodes, edges amd cells of the 2D mesh
 nums = np.array([nodes.size,0,elements.size])
@@ -110,25 +100,28 @@ dofss = dofs.transpose().ravel()
 
 #number of dofs
 noDofs = 0 #number of dofs
+
 noDofs = np.dot(mesh2d,dofs)
+#print "number of dofs per 2D element = %d" % noDofs[0]
+
 noDofs = len(A[0])*noDofs[0] + noDofs[1]
+#print "total number of dofs = %d" % noDofs
 
 
 
 ### Number of elements in the map only counts the first reference to the dofs related to a mesh element
-### CHANGE
-### IT COUNTS ALL THE DOFS
 map_dofs = 0
 for d in range(0,2):
   for i in range(0,len(mesh2d)):
     for j in range(0,mesh2d[i]*len(A[d])):
       if dofs[i][d] != 0:
 	map_dofs += 1
-print "The size of the dofs map is = %d" % map_dofs
+#print "The size of the dofs map is = %d" % map_dofs
+
 
 
 ### EXTRUSION DETAILS
-#layers = 21
+#layers = 11
 wedges = layers - 1
 
 ### NEW MAP
@@ -140,6 +133,7 @@ wedges = layers - 1
 
 mappp = elem_node.values
 mappp = mappp.reshape(-1,3)
+
 
 lins,cols = mappp.shape
 mapp=np.empty(shape=(lins,), dtype=object)
@@ -154,6 +148,7 @@ count = 0
 addNodes = dofs[0][0] != 0 or dofs[0][1] != 0
 addEdges = dofs[1][0] != 0 or dofs[1][1] != 0
 addCells = dofs[2][0] != 0 or dofs[2][1] != 0
+
 for i in range(0,lins): #for each cell to node mapping
   ns = mappp[i] - 1
   ns.sort()
@@ -189,9 +184,7 @@ for d in range(0,2): #for 2D and then for 3D
       for k in range(0,len(A[d])):
 	if dofs[i][d]!=0:
 	  off = np.append(off,dofs[i][d])
-print off
-
-
+#print off
 
 #assemble the dat
 #compute total number of dofs in the 3D mesh
@@ -206,10 +199,11 @@ t0dat = time.clock()
 count = 0
 for d in range(0,2): #for 2D and then for 3D
   for i in range(0,len(mesh2d)): # over [3,3,1]
-      for k in range(0, nums[i]*(layers-d)):
-	for l in range(0,dofs[i][d]):
-	  dat[count] = 0.0001 + l/1000
-	  count+=1
+      for k in range(0, nums[i]):
+	for k1 in range(0,layers-d):
+	  for l in range(0,dofs[i][d]):
+	    dat[count] = coords.data[k][l]
+	    count+=1
 tdat = time.clock() - t0dat
 
 ### DECLARE OP2 STRUCTURES
@@ -218,48 +212,37 @@ dofsSet = op2.Set(no_dofs,"dofsSet")
 
 #the dat has to be based on dofs not specific mesh elements
 coords = op2.Dat(dofsSet, 1, dat, np.float64, "coords")
-speed = op2.Dat(dofsSet, 1, dat, np.float64, "speed")
 
 t0ind= time.clock()
 ### THE MAP from the ind
 #create the map from element to dofs for each element in the 2D mesh
 ind = np.zeros(nums[2]*map_dofs, dtype=np.int32)
-elem_sizes = np.array([], dtype=np.int32)
-elem_offsets = np.array([], dtype=np.int32)
 count = 0
-dimChange = 0
 for mm in range(0,lins):
   #print mapp[mm]
   offset = 0
   for d in range(0,2):
-    if d == 1 and mm == 0:
-      dimChange = offset
     c = 0
     for i in range(0,len(mesh2d)):
       if dofs[i][d] != 0:
 	for j in range(0, mesh2d[i]):
 	  m = mapp[mm][c]
 	  for k in range(0, len(A[d])):
-	      ind[count] = m*dofs[i][d]*(layers - d) + A[d][k]*dofs[i][d] + offset
-	      count+=1
+	    ind[count] = m*dofs[i][d]*(layers - d) + A[d][k]*dofs[i][d] + offset
+	    count+=1
 	  c+=1
-	if mm == 0:
-	  elem_offsets = np.append(elem_offsets, offset)
-	  elem_sizes = np.append(elem_sizes, dofs[i][d])
       elif dofs[i][1-d] != 0:
 	c+= mesh2d[i]
+
       offset += dofs[i][d]*nums[i]*(layers - d)
 
-elem_offsets = np.append(elem_offsets, dat.size)
 tind = time.clock() - t0ind
-
-print " dimChange = %d" % dimChange
-print elem_offsets
-print elem_sizes
+#ppp = nums[2]*map_dofs
+#print "size of ind = %d" % ind.size
+#print "size of ind = %d" % ppp
 # Create the map from elements to dofs
-elem_dofs = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs",off, dimChange, elem_offsets, elem_sizes);
+elem_dofs = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs",off);
 
-print ind[0]
 
 ### THE RESULT ARRAY
 g = op2.Global(1, data=0.0, name='g')
@@ -268,19 +251,20 @@ g = op2.Global(1, data=0.0, name='g')
 # the elements set must also contain the layers
 elements.setLayers(layers)
 
+#t0loop= time.clock()
 ### CALL PAR LOOP
 # Compute volume
-print " Start tests"
 tloop = 0
-#for j in range(0,10):
-t0loop= time.clock()
-#for i in range(0,100):
-op2.par_loop(mass, elements,
+for j in range(0,10):
+  t0loop= time.clock()
+  for i in range(0,100):
+	op2.par_loop(mass, elements,
              g(op2.INC),
-             coords(elem_dofs, op2.READ),
-             speed(elem_dofs, op2.READ))
-tloop += time.clock() - t0loop # t is CPU seconds elapsed (floating point)
+             coords(elem_dofs, op2.READ)
+            )
+  tloop += time.clock() - t0loop # t is CPU seconds elapsed (floating point)
 
-ttloop = tloop / 10
-print nums[0], nums[1], nums[2], layers, tloop, g.data
+tloop = tloop / 10
+print nums[0], nums[1], nums[2], layers, tloop
+
 #print g.data
