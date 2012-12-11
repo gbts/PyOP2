@@ -216,10 +216,13 @@ t0ind= time.clock()
 #create the map from element to dofs for each element in the 2D mesh
 ind = np.zeros(nums[2]*map_dofs, dtype=np.int32)
 count = 0
+dimChange = 0
 for mm in range(0,lins):
   #print mapp[mm]
   offset = 0
   for d in range(0,2):
+    if d == 1 and mm == 0:
+      dimChange = offset
     c = 0
     for i in range(0,len(mesh2d)):
       if dofs[i][d] != 0:
@@ -239,7 +242,7 @@ ppp = nums[2]*map_dofs
 #print "size of ind = %d" % ind.size
 #print "size of ind = %d" % ppp
 # Create the map from elements to dofs
-elem_dofs = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs",off);
+elem_dofs = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs",off, dimChange);
 
 print ind[0]
 

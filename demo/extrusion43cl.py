@@ -52,9 +52,17 @@ parser.add_argument('-m', '--mesh',
                     type=str,
                     required=True,
                     help='Base name of triangle mesh (excluding the .ele or .node extension)')
+
+parser.add_argument('-l', '--layers',
+                    action='store',
+                    type=str,
+                    required=True,
+                    help='Base name of triangle mesh (excluding the .ele or .node extension)')
+
 opt = vars(parser.parse_args())
 op2.init(**opt)
 mesh_name = opt['mesh']
+layers = int(opt['layers'])
 
 # Generate code for kernel
 mass = op2.Kernel("""
@@ -122,7 +130,7 @@ print "The size of the dofs map is = %d" % map_dofs
 
 
 ### EXTRUSION DETAILS
-layers = 151
+#layers = 11
 wedges = layers - 1
 
 ### NEW MAP
@@ -245,7 +253,7 @@ speed = op2.Dat(dofsSet, 1, dat, np.float64, "speed") #<------------------------
 t0ind= time.clock()
 ### THE MAP from the ind
 #create the map from element to dofs for each element in the 2D mesh
-ind = np.zeros(nums[2]*map_dofs)
+ind = np.zeros(nums[2]*map_dofs, dtype=np.int32)
 #ind = np.array([], dtype = np.int32) #<----------------------------------------------------<<
 #(lins,cols) = mapp.shape
 count = 0
@@ -286,7 +294,7 @@ g = op2.Global(1, data=0.0, name='g')  #<---------------------------------------
 
 ### ADD LAYERS INFO TO ITERATION SET
 # the elements set must also contain the layers
-elements.setLayers(11)
+elements.setLayers(layers)
 
 #print "layers = %d" % elements.layers
 

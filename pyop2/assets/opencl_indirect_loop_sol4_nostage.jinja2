@@ -33,11 +33,10 @@
     c = 2;
     for (j = 0; j < {{ arg._name }}_offsets_size; j += c){
        if (j == {{ arg._name }}_offsets_dimChange){
-          c = 1;
+         c = 1;
        }
        if (k < {{ arg._name }}_offsets[j+c]){
-          {{ arg._shared_name }}[i_1] = {{ arg._name }}[{{ arg._map_name }}[j] + k - {{ arg._name }}_offsets[j]];
-          break;
+         {{ arg._shared_name }}[i_1] = {{ arg._name }}[{{ arg._map_name }}[j] + k - {{ arg._name }}_offsets[j]];
        }
   }
 }
@@ -83,7 +82,7 @@
 {% endfor -%}
 {%- else -%}
 {%- for i in range(arg.map.dim) %}
-{{ arg._vec_name }}[{{ i }}] = &{{ arg._shared_name }}[{{ arg._name }}_offsets[p_loc_map[i_1 + {{arg._which_indirect + i}}*set_size + shared_memory_offset]]];
+{{ arg._vec_name }}[{{ i }}] = {{ arg._name }} + i_1;
 {%- endfor -%}
 {%- endif -%}
 {%- endmacro -%}
@@ -205,26 +204,10 @@ void {{ parloop._stub_name }}(
   {%- endif %}
   __private int block_offset
 ) {
-  __local char shared [{{ launch.local_memory_size }}] __attribute__((aligned(sizeof(long))));
-  __local int shared_memory_offset;
+
   __local int active_threads_count;
 
-  {% for arg in parloop._unique_dat_args %}
-  {%- set x = launch.work_group_size * arg.map.off.size -%}
-  __local int {{arg._name}}_offsets[ {{ x }} ];
-  {% endfor %}
 
-  {% for arg in parloop._unique_dat_args %}
-  __local int acc_off_{{ arg._name }}[{{ arg.map.dim }}] = {  {%- set acc = 0 -%}
-                                                        {%- for i in arg.map.off -%}
-                                                        {{ acc }}
-                                                        {%- if not loop.last -%}
-                                                        ,
-                                                        {%- endif -%}
-                                                        {%- set acc = acc + i -%}
-                                                        {%- endfor -%}
-                                                        };
-  {% endfor %}
 
   int nbytes;
   int block_id;
@@ -233,25 +216,8 @@ void {{ parloop._stub_name }}(
   int k;
   int j;
   int c;
-  int change;
 
-  {%- if(parloop._it_space.layers > 1) %}
-    {%- for arg in parloop._unique_dat_args %}
-  __local int {{ arg._name }}_offsets_size;
-    {%- endfor -%}
-  {%- endif %}
 
-  {%- if(parloop._it_space.layers > 1) %}
-    {%- for arg in parloop._unique_dat_args %}
-  __local int {{ arg._name }}_total_values;
-    {%- endfor -%}
-  {%- endif %}
-
-  {%- if(parloop._it_space.layers > 1) %}
-    {%- for arg in parloop._unique_dat_args %}
-  __local int {{ arg._name }}_offsets_dimChange;
-    {%- endfor -%}
-  {%- endif %}
 
 {%- if(parloop._unique_indirect_dat_args) %}
 {%- if(parloop._all_inc_indirect_dat_args) %}
@@ -296,11 +262,7 @@ void {{ parloop._stub_name }}(
 {% endif %}
 
   // shared indirection mappings
-{%- for arg in parloop._unique_indirect_dat_args %}
-  __global int* __local {{ arg._map_name }};
-  __local int {{ arg._size_name }};
-  __local {{ arg.data._cl_type }}* __local {{ arg._shared_name }};
-{%- endfor %}
+
 {% for arg  in parloop._all_non_inc_vec_map_args %}
   __local {{ arg.data._cl_type }}* {{ arg._vec_name }}[{{ arg.map.dim }}];
 {%- endfor %}
@@ -321,69 +283,11 @@ void {{ parloop._stub_name }}(
     active_threads_count_ceiling = get_local_size(0) * (1 + (active_threads_count - 1) / get_local_size(0));
     colors_count = p_nthrcol[block_id];
 {%- endif %}
-    shared_memory_offset = p_offset[block_id];
-    {% for arg in parloop._unique_indirect_dat_args -%}
-    {{ arg._size_name }} = p_ind_sizes[{{loop.index0}} + block_id * {{ loop.length }}];
-    {{ arg._map_name }} = &p_ind_map[{{arg._which_indirect}} * set_size] + p_ind_offsets[{{loop.index0}} + block_id * {{loop.length}}];
-
-    j = 0;
-    i_1 = 0;
-    k = 0;
-    change = 0;
-    for(c = 0; c < {{ arg._size_name }}; c++){
-      {{arg._name}}_offsets[k] = j;
-      k++;
-      if ({{ arg._map_name }}[c] >= {{ arg._name }}_elem_off[i_1 + 1]){
-        i_1++;
-      }
-      if ( {{ arg._map_name }}[c] < {{arg.map.dimChange}}){
-          c++;
-          {{arg._name}}_offsets[k] = j + {{arg._name}}_elem_sizes[i_1];
-          k++;
-          j += {{arg._name}}_elem_sizes[i_1] * {{ parloop._it_space.layers }};
-      } else {
-          if ( change == 0 && {{ arg._map_name }}[c] >= {{arg.map.dimChange}}){
-            {{arg._name}}_offsets_dimChange = k - 1;
-            change = 1;
-          }
-          j += {{arg._name}}_elem_sizes[i_1] * ({{ parloop._it_space.layers}} - 1);
-      }
-    }
-    if (change == 0){
-      {{arg._name}}_offsets_dimChange = k - 1;
-    }
-    {{arg._name}}_offsets[k] = j;
-    {{arg._name}}_offsets_size = k;
-    {{arg._name}}_total_values = j;
-
-{% endfor %}
-
-    nbytes = 0;
-{%- for arg in parloop._unique_indirect_dat_args %}
-    {{ arg._shared_name }} = (__local {{ arg.data._cl_type }}*) (&shared[nbytes]);
-    {% if(parloop._it_space.layers > 1)  %}
-      nbytes += ROUND_UP({{arg._size_name }} * {{ arg.data.cdim }} * sizeof({{ arg.data._cl_type }}) * ({{ parloop._it_space.layers }} - 1));
-    {% else %}
-      nbytes += ROUND_UP({{arg._size_name }} * {{ arg.data.cdim }} * sizeof({{ arg.data._cl_type }}));
-    {% endif %}
-
-{%- endfor %}
-
 
   }
   barrier(CLK_LOCAL_MEM_FENCE);
 
-{% if(parloop._unique_read_or_rw_indirect_dat_args) -%}
-  // staging in of indirect dats
-  {% for arg in parloop._unique_read_or_rw_indirect_dat_args %}
-  {%- if parloop._it_space.layers > 1 %}
-  {{ staginginproper(arg) }}
-  {%- else %}
-  {{ stagingin(arg) }}
-  {%- endif %}
-  {% endfor %}
-  barrier(CLK_LOCAL_MEM_FENCE);
-{% endif %}
+
 
 {%- if(parloop._unique_inc_indirect_dat_args) %}
   // zeroing local memory for indirect reduction

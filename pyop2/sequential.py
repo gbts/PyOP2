@@ -330,15 +330,15 @@ class ParLoop(rt.ParLoop):
                     off_i.append(c_off_init(count))
                     off_d.append(c_off_decl(count))
                     off_a.append(c_add_off(arg,arg.map.off.size,count))
-        if off_i != []:
-            _off_args = ', '
-            _off_args +=', '.join(off_i)
-            _off_inits = ';\n'.join(off_d)
-            _apply_offset = ' \n'.join(off_a)
-            _extr_loop = '\n'
-            _extr_loop += extrusion_loop(self._it_space.layers-1)
-            _extr_loop_close = '}'
-            _kernel_args += ', j_0'
+            if off_i != []:
+              _off_args = ', '
+              _off_args +=', '.join(off_i)
+              _off_inits = ';\n'.join(off_d)
+              _apply_offset = ' \n'.join(off_a)
+              _extr_loop = '\n'
+              _extr_loop += extrusion_loop(self._it_space.layers-1)
+              _extr_loop_close = '}'
+              _kernel_args += ', j_0'
 
         wrapper = """
             void wrap_%(kernel_name)s__(%(set_size_wrapper)s, %(wrapper_args)s %(const_args)s %(off_args)s) {

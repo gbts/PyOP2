@@ -505,7 +505,7 @@ class ParLoop(op2.ParLoop):
     def _i_partition_size(self,layers=None):
         #TODO FIX: something weird here
         #available_local_memory
-        warnings.warn('temporary fix to available local memory computation (-512)')
+        #warnings.warn('temporary fix to available local memory computation (-512)')
         available_local_memory = _max_local_memory - 512
         # 16bytes local mem used for global / local indices and sizes
         available_local_memory -= 16
@@ -538,7 +538,10 @@ class ParLoop(op2.ParLoop):
         #3. TODO: divide by the size of a column, return the number of columns in each partition
         max_bytes = sum(map(lambda a: a.data._bytes_per_elem, self._all_indirect_args))
         if layers > 1:
-            max_bytes *= layers
+          mm = 1
+          for a in self._all_indirect_args:
+            mm = max(mm, max(a.map.off))
+          max_bytes *= self._it_space.layers * mm
         #returns the number of elements in a partition
         return available_local_memory / (2 * _warpsize * max_bytes) * (2 * _warpsize)
 
@@ -553,7 +556,7 @@ class ParLoop(op2.ParLoop):
                 # (4/8)ptr bytes for each dat buffer passed to the kernel
                 # (4/8)ptr bytes for each temporary global reduction buffer passed to the kernel
                 # 7: 7bytes potentialy lost for aligning the shared memory buffer to 'long'
-                warnings.warn('temporary fix to available local memory computation (-512)')
+                #warnings.warn('temporary fix to available local memory computation (-512)')
                 available_local_memory = _max_local_memory - 512
                 available_local_memory -= 16
                 available_local_memory -= (len(self._unique_dat_args) + len(self._all_global_non_reduction_args))\
@@ -617,7 +620,6 @@ class ParLoop(op2.ParLoop):
                                      'op2const': Const._definitions()
                                  }).encode("ascii")
         self.dump_gen_code()
-        #op2._parloop_cache[key] = self._src
 
     def compute(self):
         if self._has_soa:
@@ -637,7 +639,12 @@ class ParLoop(op2.ParLoop):
                               partition_size=conf['partition_size'],
                               matrix_coloring=self._requires_matrix_coloring)
 
-                conf['local_memory_size'] = self._plan.nshared
+                mm = 1
+                for a in self._all_indirect_args:
+                  mm = max(mm, max(a.map.off))
+                conf['local_memory_size'] = self._plan.nshared * self._it_space.layers * mm
+                if conf['local_memory_size'] > 30000: # TODO: make this more accurate
+                  conf['local_memory_size'] = 30000
                 conf['ninds'] = self._plan.ninds
                 conf['work_group_size'] = min(_max_work_group_size,conf['partition_size'])
                 conf['work_group_count'] = self._plan.nblocks
@@ -712,13 +719,13 @@ class ParLoop(op2.ParLoop):
                         arg.map._off_to_device()
                         self._fun.append_arg(arg.map._off_device_values.data)
 
-            if self._it_space.layers > 1:
+            if self._it_space.layers > 1 and arg.map.elem_offsets != None:
                for arg in self.args:
                     if not arg._is_mat and arg._is_vec_map:
                         arg.map._elem_off_to_device()
                         self._fun.append_arg(arg.map._elem_off_device_values.data)
 
-            if self._it_space.layers > 1:
+            if self._it_space.layers > 1 and arg.map.elem_sizes != None:
                for arg in self.args:
                     if not arg._is_mat and arg._is_vec_map:
                         arg.map._elem_sizes_to_device()
@@ -734,8 +741,6 @@ class ParLoop(op2.ParLoop):
                 cl.enqueue_nd_range_kernel(_queue, self._fun, (int(thread_count),), (int(threads_per_block),), g_times_l=False).wait()
                 block_offset += blocks_per_grid
 
-        #print "--> 7 <--"
-        # mark !READ data as dirty
         for arg in self.args:
             if arg.access is not READ:
                 arg.data.state = DeviceDataMixin.DEVICE
@@ -827,3 +832,4 @@ _jinja2_direct_loop = _jinja2_env.get_template("opencl_direct_loop.jinja2")
 _jinja2_indirect_loop = _jinja2_env.get_template("opencl_indirect_loop.jinja2")
 _jinja2_indirect_loop_sol3 = _jinja2_env.get_template("opencl_indirect_loop_sol3.jinja2")
 _jinja2_indirect_loop_sol4 = _jinja2_env.get_template("opencl_indirect_loop_sol4.jinja2")
+_jinja2_indirect_loop_sol4_nostage = _jinja2_env.get_template("opencl_indirect_loop_sol4_nostage.jinja2")

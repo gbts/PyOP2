@@ -68,7 +68,7 @@ void comp_vol(double A[1], double *x[1], int j)
 mass = op2.Kernel("""
 void comp_vol(double A[1], double *x[], double *y[], int j)
 {
-  for(int i=0; i<12; i++){
+  for(int i=0; i<6; i++){
     A[0]+=x[i][0] + y[i][0];
   }
 
