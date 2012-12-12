@@ -82,7 +82,7 @@
 {% endfor -%}
 {%- else -%}
 {%- for i in range(arg.map.dim) %}
-{{ arg._vec_name }}[{{ i }}] = {{ arg._name }} + i_1;
+{{ arg._vec_name }}[{{ i }}] = {{ arg._name }} + {{ arg._name }}_map[p_loc_map[i_1 + {{arg._which_indirect + i}}*set_size + shared_memory_offset]];
 {%- endfor -%}
 {%- endif -%}
 {%- endmacro -%}
@@ -202,11 +202,12 @@ void {{ parloop._stub_name }}(
   __global int* {{ arg._name }}_elem_sizes,
     {%- endfor -%}
   {%- endif %}
+
   __private int block_offset
 ) {
-
+  __local char shared [{{ launch.local_memory_size }}] __attribute__((aligned(sizeof(long))));
   __local int active_threads_count;
-
+  __local int shared_memory_offset;
 
 
   int nbytes;
@@ -262,9 +263,12 @@ void {{ parloop._stub_name }}(
 {% endif %}
 
   // shared indirection mappings
-
+{%- for arg in parloop._unique_indirect_dat_args %}
+  __global int* __local {{ arg._map_name }};
+  __local int {{ arg._size_name }};
+{%- endfor %}
 {% for arg  in parloop._all_non_inc_vec_map_args %}
-  __local {{ arg.data._cl_type }}* {{ arg._vec_name }}[{{ arg.map.dim }}];
+  __global {{ arg.data._cl_type }}* {{ arg._vec_name }}[{{ arg.map.dim }}];
 {%- endfor %}
 {% for arg in parloop._all_inc_vec_map_args %}
   {{ arg.data._cl_type }}* {{ arg._vec_name }}[{{ arg.map.dim }}];
@@ -285,6 +289,23 @@ void {{ parloop._stub_name }}(
 {%- endif %}
 
   }
+
+  if (get_local_id(0) == 0) {
+    block_id = p_blk_map[get_group_id(0) + block_offset];
+    active_threads_count = p_nelems[block_id];
+{%- if(parloop._all_inc_indirect_dat_args) %}
+    active_threads_count_ceiling = get_local_size(0) * (1 + (active_threads_count - 1) / get_local_size(0));
+    colors_count = p_nthrcol[block_id];
+{%- endif %}
+    shared_memory_offset = p_offset[block_id];
+    {% for arg in parloop._unique_indirect_dat_args -%}
+    {{ arg._size_name }} = p_ind_sizes[{{loop.index0}} + block_id * {{ loop.length }}];
+    {{ arg._map_name }} = &p_ind_map[{{arg._which_indirect}} * set_size] + p_ind_offsets[{{loop.index0}} + block_id * {{loop.length}}];
+
+{% endfor %}
+
+  }
+
   barrier(CLK_LOCAL_MEM_FENCE);
 
 

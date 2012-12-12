@@ -406,9 +406,18 @@ class Map(op2.Map):
             self._elem_sizes_device_values = array.to_device(_queue, self.elem_sizes)
         else:
             from warnings import warn
-            warn("Copying Map OFFSET data for %s again, do you really want to do this?" % \
-                 self)
+            #warn("Copying Map OFFSET data for %s again, do you really want to do this?" % \
+            #     self)
             self._elem_sizes_device_values.set(self.elem_sizes, _queue)
+
+    def _ind_to_device(self):
+        if not hasattr(self, '_ind_device_values'):
+            self._ind_device_values = array.to_device(_queue, self.values)
+        else:
+            from warnings import warn
+            #warn("Copying Map OFFSET data for %s again, do you really want to do this?" % \
+            #     self)
+            self._ind_device_values.set(self.values, _queue)
 
 class Plan(op2.Plan):
     @property
@@ -593,7 +602,10 @@ class ParLoop(op2.ParLoop):
                     if arg._is_direct or (arg._is_global and not arg._is_global_reduction):
                         i = ("__global", None)
                     elif (arg._is_indirect or arg._is_vec_map) and not arg._is_indirect_reduction:
-                        i = ("__local", None)
+                        if arg.map.stagein == 1:
+                            i = ("__local", None)
+                        else:
+                            i = ("__global", None)
                     else:
                         i = ("__private", None)
 
@@ -609,9 +621,13 @@ class ParLoop(op2.ParLoop):
 
         #do codegen
         user_kernel = instrument_user_kernel()
-        template = _jinja2_direct_loop if self._is_direct \
+        stagein = min([arg.map.stagein for arg in self._all_indirect_args])
+        if stagein == 0:
+           template = _jinja2_direct_loop if self._is_direct \
+                            else _jinja2_indirect_loop_sol4_nostage
+        else:
+           template = _jinja2_direct_loop if self._is_direct \
                                        else _jinja2_indirect_loop_sol4
-
 
         self._src = template.render({'parloop': self,
                                      'user_kernel': user_kernel,
@@ -639,15 +655,22 @@ class ParLoop(op2.ParLoop):
                               partition_size=conf['partition_size'],
                               matrix_coloring=self._requires_matrix_coloring)
 
-                mm = 1
-                for a in self._all_indirect_args:
-                  mm = max(mm, max(a.map.off))
-                conf['local_memory_size'] = self._plan.nshared * self._it_space.layers * mm
-                if conf['local_memory_size'] > 30000: # TODO: make this more accurate
-                  conf['local_memory_size'] = 30000
                 conf['ninds'] = self._plan.ninds
                 conf['work_group_size'] = min(_max_work_group_size,conf['partition_size'])
                 conf['work_group_count'] = self._plan.nblocks
+
+                stagein = min([arg.map.stagein for arg in self._all_indirect_args])
+                if stagein == 0:
+                  #for NO STAGING
+                  conf['local_memory_size'] = max([arg.data.cdim * conf['work_group_size'] * arg.data.data.itemsize for arg in self.args if arg._is_global_reduction])
+                else:
+                  #for STAGING
+                  mm = 1
+                  for a in self._all_indirect_args:
+                    mm = max(mm, max(a.map.off))
+                  conf['local_memory_size'] = self._plan.nshared * self._it_space.layers * mm
+                  if conf['local_memory_size'] > 30000: # TODO: make this more accurate
+                    conf['local_memory_size'] = 30000
             else:
                 self._plan = Plan(self.kernel, self._it_space.iterset,
                               *self._unwound_args,

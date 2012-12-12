@@ -59,11 +59,19 @@ parser.add_argument('-l', '--layers',
                     required=True,
                     help='Base name of triangle mesh (excluding the .ele or .node extension)')
 
+parser.add_argument('-s', '--stagein',
+                    action='store',
+                    type=str,
+                    required=False,
+                    help='Base name of triangle mesh (excluding the .ele or .node extension)')
+
 opt = vars(parser.parse_args())
 op2.init(**opt)
 mesh_name = opt['mesh']
 layers = int(opt['layers'])
-
+stagein = 1 # by default it does the staging in
+if opt['stagein'] != None:
+  stagein = int(opt['stagein']) # 0 for no staging
 
 # Generate code for kernel
 mass = op2.Kernel("""
@@ -241,7 +249,7 @@ elem_offsets = np.append(elem_offsets, np.int32(dat.size))
 tind = time.clock() - t0ind
 
 # Create the map from elements to dofs
-elem_dofs = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs",off, dimChange, elem_offsets, elem_sizes);
+elem_dofs = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs",off, dimChange, elem_offsets, elem_sizes, stagein);
 
 ### THE RESULT ARRAY
 g = op2.Global(1, data=0.0, name='g')

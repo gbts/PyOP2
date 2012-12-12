@@ -585,7 +585,7 @@ class Map(object):
 
     @validate_type(('iterset', Set, SetTypeError), ('dataset', Set, SetTypeError), \
             ('dim', int, DimTypeError), ('name', str, NameTypeError))
-    def __init__(self, iterset, dataset, dim, values=None, name=None, off=None, dimChange=None, elem_offsets=None, elem_sizes=None):
+    def __init__(self, iterset, dataset, dim, values=None, name=None, off=None, dimChange=None, elem_offsets=None, elem_sizes=None, stagein=None):
         self._iterset = iterset
         self._dataset = dataset
         self._dim = dim
@@ -593,6 +593,7 @@ class Map(object):
         self._dimChange = dimChange
         self._elem_offsets = elem_offsets
         self._elem_sizes = elem_sizes
+        self._stagein = stagein
         self._values = verify_reshape(values, np.int32, (iterset.size, dim), \
                                       allow_none=True)
         self._name = name or "map_%d" % Map._globalcount
@@ -656,6 +657,11 @@ class Map(object):
     def elem_sizes(self):
         """Mapping array."""
         return self._elem_sizes
+
+    @property
+    def stagein(self):
+        """Mapping array."""
+        return self._stagein
 
     @property
     def name(self):
