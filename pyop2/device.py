@@ -255,8 +255,8 @@ class Global(DeviceDataMixin, op2.Global):
 
 class Map(op2.Map):
     _arg_type = Arg
-    def __init__(self, iterset, dataset, dim, values, name=None, off=None, dimChange=None, elem_offsets=None, elem_sizes=None):
-        op2.Map.__init__(self, iterset, dataset, dim, values, name, off, dimChange, elem_offsets, elem_sizes)
+    def __init__(self, iterset, dataset, dim, values, name=None, off=None, dimChange=None, elem_offsets=None, elem_sizes=None, stagein=None):
+        op2.Map.__init__(self, iterset, dataset, dim, values, name, off, dimChange, elem_offsets, elem_sizes, stagein)
 
     def _to_device(self):
         raise RuntimeError("Abstract device class can't do this")
