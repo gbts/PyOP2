@@ -271,5 +271,5 @@ for j in range(0,10):
   tloop += time.clock() - t0loop # t is CPU seconds elapsed (floating point)
 
 tloop = tloop / 10
-print nums[0], nums[1], nums[2], layers, tloop, g.data
+#print nums[0], nums[1], nums[2], layers, tloop, g.data
 #print g.data
