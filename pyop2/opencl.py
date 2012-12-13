@@ -52,6 +52,7 @@ import re
 import time
 import md5
 
+
 class Kernel(op2.Kernel):
     """OP2 OpenCL kernel type."""
 
@@ -563,6 +564,7 @@ class ParLoop(op2.ParLoop):
 	  for a in self._all_indirect_args:
 	    mm = max(mm, max(a.map.off))
 	  max_bytes *= self._it_space.layers * mm
+	  available_local_memory -= 1000
         #returns the number of elements in a partition
         return available_local_memory / (2 * _warpsize * max_bytes) * (2 * _warpsize)
 
@@ -614,9 +616,11 @@ class ParLoop(op2.ParLoop):
                     if arg._is_direct or (arg._is_global and not arg._is_global_reduction):
                         i = ("__global", None)
                     elif (arg._is_indirect or arg._is_vec_map) and not arg._is_indirect_reduction:
-			 if arg.map.stagein == 1:
+			 if arg.map.stagein == 0:
+			    i = ("__global", None)
+			 elif arg.map.stagein == 1:
 			    i = ("__local", None)
-			 else:
+			 elif arg.map.stagein == 2:
 			    i = ("__global", None)
                     else:
                         i = ("__private", None)
@@ -643,9 +647,12 @@ class ParLoop(op2.ParLoop):
         if stagein == 0:
 	    template = _jinja2_direct_loop if self._is_direct \
                                        else _jinja2_indirect_loop_sol4_nostage
-	else:
+	elif stagein == 1:
 	    template = _jinja2_direct_loop if self._is_direct \
                                        else _jinja2_indirect_loop_sol4
+        elif stagein == 2:
+	    template = _jinja2_direct_loop if self._is_direct \
+                                       else _jinja2_indirect_loop_sol4_nostage
 
         self._src = template.render({'parloop': self,
                                      'user_kernel': user_kernel,
@@ -655,7 +662,7 @@ class ParLoop(op2.ParLoop):
                                  }).encode("ascii")
         self.dump_gen_code()
         op2._parloop_cache[key] = self._src
-        print self._src
+        #print self._src
 
     def compute(self):
         if self._has_soa:
@@ -682,15 +689,16 @@ class ParLoop(op2.ParLoop):
 		conf['work_group_count'] = self._plan.nblocks
 
 		stagein = min([arg.map.stagein for arg in self._all_indirect_args])
-		if stagein == 0:
-		  #for NO STAGING
+		if stagein == 0 or stagein == 2:
+		  #NO STAGING
 		  conf['local_memory_size'] = max([arg.data.cdim * conf['work_group_size'] * arg.data.data.itemsize for arg in self.args if arg._is_global_reduction])
 		else:
-		  #for STAGING
+		  #WITH STAGING
 		  mm = 1
 		  for a in self._all_indirect_args:
 		    mm = max(mm, max(a.map.off))
 		  conf['local_memory_size'] = self._plan.nshared * self._it_space.layers * mm
+		  ## the following shouldn't be needed BUT it's left in for safety
 		  if conf['local_memory_size'] > 30000: # TODO: make this more accurate
 		     conf['local_memory_size'] = 30000
 	    else:
@@ -706,6 +714,8 @@ class ParLoop(op2.ParLoop):
         self.codegen(conf)
 
         kernel = compile_kernel()
+
+        #tt = time.clock()
 
         for arg in self._unique_args:
             arg.data._allocate_device()
@@ -768,13 +778,8 @@ class ParLoop(op2.ParLoop):
 		if not arg._is_mat and arg._is_vec_map:
 		  arg.map._elem_sizes_to_device()
 		  kernel.append_arg(arg.map._elem_sizes_device_values.data)
-
-	    #if self._it_space.layers > 1:
-	    #  for arg in self.args:
-	#	if not arg._is_mat and arg._is_vec_map:
-	#	  arg.map._ind_to_device()
-	#	  kernel.append_arg(arg.map._ind_device_values.data)
-
+	    #t1 = time.clock() - tt
+	    #print t1
             block_offset = 0
             for i in range(self._plan.ncolors):
                 blocks_per_grid = int(self._plan.ncolblk[i])
@@ -784,7 +789,8 @@ class ParLoop(op2.ParLoop):
                 kernel.set_last_arg(np.int32(block_offset))
                 cl.enqueue_nd_range_kernel(_queue, kernel, (int(thread_count),), (int(threads_per_block),), g_times_l=False).wait()
                 block_offset += blocks_per_grid
-
+	#t2 = time.clock() - t1
+        #print t1
         for arg in self.args:
             if arg.access is not READ:
                 arg.data.state = DeviceDataMixin.DEVICE
@@ -799,6 +805,9 @@ class ParLoop(op2.ParLoop):
 
         if self._has_soa:
             op2stride.remove_from_namespace()
+
+        #t3 = time.clock() - t2
+        #print t1, t2, t3
 
 #Monkey patch pyopencl.Kernel for convenience
 _original_clKernel = cl.Kernel
