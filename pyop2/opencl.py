@@ -604,12 +604,15 @@ class ParLoop(op2.ParLoop):
                     if arg._is_direct or (arg._is_global and not arg._is_global_reduction):
                         i = ("__global", None)
                     elif (arg._is_indirect or arg._is_vec_map) and not arg._is_indirect_reduction:
-                        if arg.map.stagein == 1:
-                            i = ("__local", None)
-                        elif arg.map.stagein == 0:
-                            i = ("__global", None)
-                        elif arg.map.stagein == 2:
-                            i = ("__global", None)
+                        i = ("__local", None)
+                        if self._it_space.layers > 1:
+                            ## EXTRUDED CASE
+                            if arg.map.stagein == 1:
+                                i = ("__local", None)
+                            elif arg.map.stagein == 0:
+                                i = ("__global", None)
+                            elif arg.map.stagein == 2:
+                                i = ("__global", None)
                     else:
                         i = ("__private", None)
 
@@ -625,15 +628,19 @@ class ParLoop(op2.ParLoop):
 
         #do codegen
         user_kernel = instrument_user_kernel()
-        stagein = min([arg.map.stagein for arg in self._all_indirect_args])
-        if stagein == 0:
-           template = _jinja2_direct_loop if self._is_direct \
+        template = _jinja2_direct_loop if self._is_direct \
+                            else _jinja2_indirect_loop
+        if self._it_space.layers > 1:
+          ## EXTRUDED CASE
+          stagein = min([arg.map.stagein for arg in self._all_indirect_args])
+          if stagein == 0:
+            template = _jinja2_direct_loop if self._is_direct \
                             else _jinja2_indirect_loop_sol4_nostage
-        elif stagein == 1:
-           template = _jinja2_direct_loop if self._is_direct \
+          elif stagein == 1:
+            template = _jinja2_direct_loop if self._is_direct \
                                        else _jinja2_indirect_loop_sol4
-        elif stagein == 2:
-           template = _jinja2_direct_loop if self._is_direct \
+          elif stagein == 2:
+            template = _jinja2_direct_loop if self._is_direct \
                                        else _jinja2_indirect_loop_sol4_nostage
 
         self._src = template.render({'parloop': self,
@@ -643,6 +650,7 @@ class ParLoop(op2.ParLoop):
                                      'op2const': Const._definitions()
                                  }).encode("ascii")
         self.dump_gen_code()
+        #print self._src
 
     def compute(self):
         if self._has_soa:
@@ -689,7 +697,7 @@ class ParLoop(op2.ParLoop):
                 conf['work_group_size'] = min(_max_work_group_size,
                                           conf['partition_size'])
                 conf['work_group_count'] = self._plan.nblocks
-                conf['warpsize'] = _warpsize
+        conf['warpsize'] = _warpsize
 
         self._src, self._fun = op2._parloop_cache.get(self._cache_key, (None, None))
         if self._src is None:

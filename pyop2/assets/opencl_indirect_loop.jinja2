@@ -19,14 +19,6 @@
 }
 {%- endmacro -%}
 
-{%- macro staginginextr(arg) -%}
-  for (i_1 = get_local_id(0); i_1 < {{ arg._size_name }} * {{ arg.data.cdim }}; i_1 += get_local_size(0)) {
-    for (j = 0; j < ({{ parloop._it_space.layers }} - 1); j++){
-  {{ arg._shared_name }}[i_1 * ({{ parloop._it_space.layers }} - 1) + j ] = {{ arg._name }}[{{ arg._map_name }}[i_1] + j];
-  }
-}
-{%- endmacro -%}
-
 {%- macro stagingout(arg) -%}
   for (i_1 = get_local_id(0); i_1 < {{ arg._size_name }} * {{ arg.data.cdim }}; i_1 += get_local_size(0)) {
   {{ arg.data.name }}[i_1 % {{ arg.data.cdim }} + {{ arg._map_name }}[i_1 / {{ arg.data.cdim }}] * {{ arg.data.cdim }}] = {{ arg._shared_name }}[i_1];
@@ -44,26 +36,6 @@
 {{ arg._vec_name }}[{{ i }}] = &{{ arg._shared_name }}[p_loc_map[i_1 + {{arg._which_indirect + i}}*set_size + shared_memory_offset] * {{ arg.data.cdim }}];
 {%- endfor -%}
 {%- endif -%}
-{%- endmacro -%}
-
-{%- macro populate_vec_map2(arg) -%}
-// populate vec map
-{%- if(arg._is_indirect_reduction) -%}
-{%- for i in range(arg.map.dim) %}
-{{ arg._vec_name }}[{{ i }}] = {{ arg._local_name(idx=i) }};
-{% endfor -%}
-{%- else -%}
-{%- for i in range(arg.map.dim) %}
-{{ arg._vec_name }}[{{ i }}] = &{{ arg._shared_name }}[p_loc_map[i_1 + {{arg._which_indirect + i}}*set_size + shared_memory_offset] * ({{ parloop._it_space.layers }} - 1)];
-{%- endfor -%}
-{%- endif -%}
-{%- endmacro -%}
-
-{%- macro add_off_to_vec_map(arg) -%}
-// add offset to vector map
- for(j = 0; j<{{ arg.map.dim }}; j++){
-    {{ arg._vec_name }}[j] += {{ arg._name }}_off[j];
- }
 {%- endmacro -%}
 
 {%- macro staged_arg_local_variable_zeroing(arg) -%}
@@ -157,14 +129,9 @@ void {{ parloop._stub_name }}(
   __global int* p_nelems,
   __global int* p_nthrcol,
   __global int* p_thrcol,
-  {%- if(parloop._it_space.layers > 1) %}
-    {%- for arg in parloop._unique_dat_args %}
-  __global int* {{ arg._name }}_off,
-    {%- endfor -%}
-  {%- endif %}
   __private int block_offset
 ) {
-  __local char shared [{{ launch.local_memory_size * 11 }}] __attribute__((aligned(sizeof(long))));
+  __local char shared [{{ launch.local_memory_size }}] __attribute__((aligned(sizeof(long))));
   __local int shared_memory_offset;
   __local int active_threads_count;
 
@@ -172,8 +139,6 @@ void {{ parloop._stub_name }}(
   int block_id;
 
   int i_1;
-  int k;
-  int j;
 
 {%- if(parloop._requires_coloring) %}
   __local int colors_count;
@@ -253,12 +218,7 @@ void {{ parloop._stub_name }}(
     nbytes = 0;
 {%- for arg in parloop._unique_indirect_dat_args %}
     {{ arg._shared_name }} = (__local {{ arg.data._cl_type }}*) (&shared[nbytes]);
-    {% if(parloop._it_space.layers > 1)  %}
-      nbytes += ROUND_UP({{arg._size_name }} * {{ arg.data.cdim }} * sizeof({{ arg.data._cl_type }}) * ({{ parloop._it_space.layers }} - 1));
-    {% else %}
-      nbytes += ROUND_UP({{arg._size_name }} * {{ arg.data.cdim }} * sizeof({{ arg.data._cl_type }}));
-    {% endif %}
-
+    nbytes += ROUND_UP({{arg._size_name }} * {{ arg.data.cdim }} * sizeof({{ arg.data._cl_type }}));
 {%- endfor %}
   }
   barrier(CLK_LOCAL_MEM_FENCE);
@@ -266,11 +226,7 @@ void {{ parloop._stub_name }}(
 {% if(parloop._unique_read_or_rw_indirect_dat_args) -%}
   // staging in of indirect dats
   {% for arg in parloop._unique_read_or_rw_indirect_dat_args %}
-  {%- if parloop._it_space.layers > 1 %}
-  {{ staginginextr(arg) }}
-  {%- else %}
   {{ stagingin(arg) }}
-  {%- endif %}
   {% endfor %}
   barrier(CLK_LOCAL_MEM_FENCE);
 {% endif %}
@@ -412,39 +368,19 @@ for (int i{{ loop.index0 }}=0; i{{ loop.index0 }}<{{ dim }}; ++i{{ loop.index0 }
 
 {%- macro kernel_call() -%}
 {% for arg in parloop._unique_dat_args if(arg._is_vec_map or arg._uses_itspace) %}
-  {%- if(parloop._it_space.layers > 1) %}
-    {{ populate_vec_map2(arg) }}
-  {%- else -%}
-    {{ populate_vec_map(arg) }}
-  {%- endif %}
+  {{ populate_vec_map(arg) }}
 {% endfor %}
 {% if(parloop._has_itspace) %}
 {{ matrix_kernel_call() }}
 {% else %}
- {% if (parloop._it_space.layers > 1) %}
-  for (k=0; k<({{ parloop._it_space.layers }} - 1); k++){
-  {% for arg in parloop._unique_dat_args if(arg._is_vec_map or arg._uses_itspace) %}
-    {{ add_off_to_vec_map(arg) }}
-  {% endfor %}
-    {{ parloop._kernel.name }}(
-    {% filter trim|replace("\n", ",\n") -%}
-    {%- for arg in parloop.args -%}
-    {{ kernel_call_arg(arg) }}
-    {% endfor -%}
-    {{ kernel_call_const_args() }} k
-    {%- endfilter %}
-    );
-  }
- {% else %}
-  {{ parloop._kernel.name }}(
-    {% filter trim|replace("\n", ",\n") -%}
-    {%- for arg in parloop.args -%}
-    {{ kernel_call_arg(arg) }}
-    {% endfor -%}
-    {{ kernel_call_const_args() }}
-    {%- endfilter %}
+{{ parloop._kernel.name }}(
+  {% filter trim|replace("\n", ",\n") -%}
+  {%- for arg in parloop.args -%}
+  {{ kernel_call_arg(arg) }}
+  {% endfor -%}
+  {{ kernel_call_const_args() }}
+  {%- endfilter %}
 );
-{% endif %}
 {% endif %}
 {%- endmacro -%}
 

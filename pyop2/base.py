@@ -197,7 +197,7 @@ class Set(object):
     def __init__(self, size=None, name=None, layers=None):
         self._size = size
         self._name = name or "set_%d" % Set._globalcount
-        self._layers = layers or -1
+        self._layers = layers or 0
         self._lib_handle = None
         Set._globalcount += 1
 

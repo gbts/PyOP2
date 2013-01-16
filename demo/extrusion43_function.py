@@ -41,6 +41,8 @@ from pyop2 import op2, utils
 from pyop2.ffc_interface import compile_form
 from triangle_reader import read_triangle
 from ufl import *
+from test import say_hello_to
+from computeind import compute_ind_extr
 import sys
 
 import numpy as np
@@ -138,6 +140,7 @@ mappp = mappp.reshape(-1,3)
 lins,cols = mappp.shape
 mapp=np.empty(shape=(lins,), dtype=object)
 
+t0ind= time.clock()
 ### DERIVE THE MAP FOR THE EDGES
 edg = np.empty(shape = (nums[0],),dtype=object)
 for i in range(0, nums[0]):
@@ -213,30 +216,33 @@ dofsSet = op2.Set(no_dofs,"dofsSet")
 #the dat has to be based on dofs not specific mesh elements
 coords = op2.Dat(dofsSet, 1, dat, np.float64, "coords")
 
-t0ind= time.clock()
+
 ### THE MAP from the ind
 #create the map from element to dofs for each element in the 2D mesh
-ind = np.zeros(nums[2]*map_dofs, dtype=np.int32)
-count = 0
-for mm in range(0,lins):
-  #print mapp[mm]
-  offset = 0
-  for d in range(0,2):
-    c = 0
-    for i in range(0,len(mesh2d)):
-      if dofs[i][d] != 0:
-        for j in range(0, mesh2d[i]):
-          m = mapp[mm][c]
-          for k in range(0, len(A[d])):
-              ind[count] = m*dofs[i][d]*(layers - d) + A[d][k]*dofs[i][d] + offset
-              count+=1
-          c+=1
-      elif dofs[i][1-d] != 0:
-        c+= mesh2d[i]
+lsize = nums[2]*map_dofs
+ind = compute_ind_extr(nums,map_dofs,lins,layers,mesh2d,dofs,A,wedges,mapp,lsize)
 
-      offset += dofs[i][d]*nums[i]*(layers - d)
-
-tind = time.clock() - t0ind
+#ind = np.zeros(nums[2]*map_dofs, dtype=np.int32)
+#count = 0
+#for mm in range(0,lins):
+# print mapp[mm]
+#  offset = 0
+#  for d in range(0,2):
+#    c = 0
+#    for i in range(0,len(mesh2d)):
+#      if dofs[i][d] != 0:
+#        for j in range(0, mesh2d[i]):
+#          m = mapp[mm][c]
+#          for k in range(0, len(A[d])):
+#              ind[count] = m*dofs[i][d]*(layers - d) + A[d][k]*dofs[i][d] + offset
+#              count+=1
+#          c+=1
+#      elif dofs[i][1-d] != 0:
+#        c+= mesh2d[i]
+#
+#      offset += dofs[i][d]*nums[i]*(layers - d)
+#
+#tind = time.clock() - t0ind
 #ppp = nums[2]*map_dofs
 #print "size of ind = %d" % ind.size
 #print "size of ind = %d" % ppp
@@ -247,6 +253,8 @@ elem_dofs = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs",off);
 ### THE RESULT ARRAY
 g = op2.Global(1, data=0.0, name='g')
 
+duration1 = time.clock() - t0ind
+
 ### ADD LAYERS INFO TO ITERATION SET
 # the elements set must also contain the layers
 elements.setLayers(layers)
@@ -255,16 +263,16 @@ elements.setLayers(layers)
 ### CALL PAR LOOP
 # Compute volume
 tloop = 0
-for j in range(0,10):
-  t0loop= time.clock()
-  for i in range(0,100):
+#for j in range(0,10):
+t0loop= time.clock()
+for i in range(0,100):
         op2.par_loop(mass, elements,
              g(op2.INC),
              coords(elem_dofs, op2.READ)
             )
-  tloop += time.clock() - t0loop # t is CPU seconds elapsed (floating point)
+tloop += time.clock() - t0loop # t is CPU seconds elapsed (floating point)
 
-tloop = tloop / 10
-print nums[0], nums[1], nums[2], layers, tloop
+ttloop = tloop / 10
+print nums[0], nums[1], nums[2], layers, duration1, tloop, g.data
 
 #print g.data
