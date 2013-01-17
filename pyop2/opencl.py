@@ -44,6 +44,7 @@ import pycparser
 import numpy as np
 import collections
 import warnings
+warnings.simplefilter("ignore")
 import math
 from jinja2 import Environment, PackageLoader
 from pycparser import c_parser, c_ast, c_generator
@@ -380,8 +381,8 @@ class Map(op2.Map):
             self._device_values = array.to_device(_queue, self._values)
         else:
             from warnings import warn
-            warn("Copying Map data for %s again, do you really want to do this?" % \
-                 self)
+            #warn("Copying Map data for %s again, do you really want to do this?" % \
+            #     self)
             self._device_values.set(self._values, _queue)
 
     def _off_to_device(self):
@@ -389,8 +390,8 @@ class Map(op2.Map):
             self._off_device_values = array.to_device(_queue, self.off)
         else:
             from warnings import warn
-            warn("Copying Map OFFSET data for %s again, do you really want to do this?" % \
-                 self)
+            #warn("Copying Map OFFSET data for %s again, do you really want to do this?" % \
+            #     self)
             self._off_device_values.set(self.off, _queue)
 
     def _elem_off_to_device(self):
@@ -398,8 +399,8 @@ class Map(op2.Map):
             self._elem_off_device_values = array.to_device(_queue, self.elem_offsets)
         else:
             from warnings import warn
-            warn("Copying Map OFFSET data for %s again, do you really want to do this?" % \
-                 self)
+            #warn("Copying Map OFFSET data for %s again, do you really want to do this?" % \
+            #     self)
             self._elem_off_device_values.set(self.elem_offsets, _queue)
 
     def _elem_sizes_to_device(self):

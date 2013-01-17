@@ -48,9 +48,12 @@ def compute_ind(np.ndarray[DTYPE_t, ndim=1] nums,
             for k in range(0, len2):
               a3 = <DTYPE_t>A[d][k]*a4
               for l in range(0,wedges):
-                      ind[count + l * nums[2]*map_dofs] = l + m*a4*(layers - d) + a3 + offset
+                    #ind[count + l * nums[2]*a4*mesh2d[i]] = l + m*a4*(layers - d) + a3 + offset
+              #count+=1
+                    ind[count + l * a4 * mesh2d[i]] = l + m*a4*(layers - d) + a3 + offset
               count+=1
             c+=1
+          count+= (wedges-d-1)*a4*mesh2d[i]
         elif a4 != 0:
           c+= <unsigned int>mesh2d[i]
         offset += a4*nums[i]*(layers - d)
@@ -101,6 +104,59 @@ def compute_ind_extr(np.ndarray[DTYPE_t, ndim=1] nums,
         elif a4 != 0:
           c+= <unsigned int>mesh2d[i]
         offset += a4*nums[i]*(layers - d)
+  return ind
+
+@cython.boundscheck(False)
+def swap_ind_entries(np.ndarray[DTYPE_t, ndim=1] ind,
+                    ITYPE_t k,
+                    ITYPE_t map_dofs,
+                    ITYPE_t lsize,
+                    ITYPE_t ahead,
+                    np.ndarray[int, ndim=1] my_cache,
+                    ITYPE_t same):
+  cdef unsigned int change = 0
+  cdef unsigned int found = 0
+  cdef unsigned int i,j,m,l,n
+  cdef unsigned int pos = 0
+  cdef unsigned int swaps = 0
+  for i in range(k*map_dofs,lsize,map_dofs):
+    lim = 0
+    for j in range(i,lsize,map_dofs):
+        if lim < ahead:
+            found = 0
+            for m in range(0,map_dofs):
+                look_for = ind[j + m]
+                #look for value in the cache
+                change = 0
+                for l in range(0,k):
+                    for n in range(0,map_dofs):
+                        if ind[my_cache[l] + n] == look_for:
+                            found+=1
+                            change+=1
+                            break
+                    if change == 1:
+                        break
+            if found >= same:
+                #found a candidate so swap
+                for n in range(0,map_dofs):
+                    swaps+=1
+                    aux = ind[j + n]
+                    ind[j + n] = ind[i + n]
+                    ind[i+n] = aux
+
+                my_cache[pos] = j
+                pos += 1
+                if pos == k:
+                    pos = 0
+                break
+        else:
+            my_cache[pos] = i
+            pos += 1
+            if pos == k:
+                pos = 0
+            break
+        lim += 1
+  print "swaps = %d" % swaps
   return ind
 
 

@@ -43,6 +43,7 @@ from triangle_reader import read_triangle
 from ufl import *
 from test import say_hello_to
 from computeind import compute_ind_extr
+from computeind import swap_ind_entries
 import sys
 
 import numpy as np
@@ -221,6 +222,19 @@ coords = op2.Dat(dofsSet, 1, dat, np.float64, "coords")
 #create the map from element to dofs for each element in the 2D mesh
 lsize = nums[2]*map_dofs
 ind = compute_ind_extr(nums,map_dofs,lins,layers,mesh2d,dofs,A,wedges,mapp,lsize)
+
+#SWAP ind entries for performance
+#k = 10 #depth
+#same = 2
+#my_cache = map_dofs*np.arange(0,k,dtype = np.int32)
+#pos = 0
+#ahead = 100
+#swaps = 0
+
+#ind = swap_ind_entries(ind, k, map_dofs,lsize,ahead,my_cache,same)
+
+#print "swaps = %d" % swaps
+
 
 #ind = np.zeros(nums[2]*map_dofs, dtype=np.int32)
 #count = 0

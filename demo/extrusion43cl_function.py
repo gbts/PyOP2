@@ -41,6 +41,7 @@ from pyop2 import op2, utils
 from pyop2.ffc_interface import compile_form
 from triangle_reader import read_triangle
 from ufl import *
+from computeind import compute_ind_extr
 import sys
 
 import numpy as np
@@ -143,6 +144,7 @@ mappp = mappp.reshape(-1,3)
 lins,cols = mappp.shape
 mapp=np.empty(shape=(lins,), dtype=object)
 
+t0ind = time.clock()
 ### DERIVE THE MAP FOR THE EDGES
 edg = np.empty(shape = (nums[0],),dtype=object)
 for i in range(0, nums[0]):
@@ -216,15 +218,18 @@ dofsSet = op2.Set(no_dofs,"dofsSet")
 #the dat has to be based on dofs not specific mesh elements
 coords = op2.Dat(dofsSet, 1, dat, np.float64, "coords")
 
-t0ind= time.clock()
 ### THE MAP from the ind
 #create the map from element to dofs for each element in the 2D mesh
-ind = np.zeros(nums[2]*map_dofs, dtype=np.int32)
+
+lsize = nums[2]*map_dofs
+ind = compute_ind_extr(nums,map_dofs,lins,layers,mesh2d,dofs,A,wedges,mapp,lsize)
+
+#ind = np.zeros(nums[2]*map_dofs, dtype=np.int32)
 elem_sizes = np.array([], dtype=np.int32)
 elem_offsets = np.array([], dtype=np.int32)
 count = 0
 dimChange = 0
-for mm in range(0,lins):
+for mm in range(0,1): #chanbged this to 1
   offset = 0
   for d in range(0,2):
     if d == 1 and mm == 0:
@@ -246,13 +251,14 @@ for mm in range(0,lins):
       offset += dofs[i][d]*nums[i]*(layers - d)
 
 elem_offsets = np.append(elem_offsets, np.int32(dat.size))
-tind = time.clock() - t0ind
 
 # Create the map from elements to dofs
 elem_dofs = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs",off, dimChange, elem_offsets, elem_sizes, stagein);
 
 ### THE RESULT ARRAY
 g = op2.Global(1, data=0.0, name='g')
+
+duration1 = time.clock() - t0ind
 
 ### ADD LAYERS INFO TO ITERATION SET
 # the elements set must also contain the layers
@@ -261,15 +267,28 @@ elements.setLayers(layers)
 ### CALL PAR LOOP
 # Compute volume
 tloop = 0
-for j in range(0,10):
-  t0loop= time.clock()
-  for i in range(0,100):
+#for j in range(0,10):
+#  t0loop= time.clock()
+#  for i in range(0,100):
+#    op2.par_loop(mass, elements,
+#             g(op2.INC),
+#             coords(elem_dofs, op2.READ)
+#             )
+#  tloop += time.clock() - t0loop # t is CPU seconds elapsed (floating point)
+
+print "Loop start"
+
+tloop = 0
+t0loop= time.clock()
+t0loop2 = time.time()
+for i in range(0,100):
     op2.par_loop(mass, elements,
              g(op2.INC),
              coords(elem_dofs, op2.READ)
              )
-  tloop += time.clock() - t0loop # t is CPU seconds elapsed (floating point)
+tloop = time.clock() - t0loop # t is CPU seconds elapsed (floating point)
+tloop2 = time.time() - t0loop2
 
-tloop = tloop / 10
-print nums[0], nums[1], nums[2], layers, tloop, g.data
+ttloop = tloop / 10
+print nums[0], nums[1], nums[2], layers, duration1, tloop, tloop2, g.data
 #print g.data
