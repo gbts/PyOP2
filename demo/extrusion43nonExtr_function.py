@@ -260,10 +260,13 @@ g = op2.Global(1, data=0.0, name='g')
 #measure time it takes to do the initial computations
 duration1 = time.clock() - t0ind
 
+#print ind.size
+#print lsize
 ### ADD LAYERS INFO TO ITERATION SET
 ### CALL PAR LOOP
 # Compute volume
 tloop = 0
+tloop2 = 0
 #for j in range(0,10):
 #    t0loop= time.clock()
 #    for i in range(0,100):
@@ -273,14 +276,19 @@ tloop = 0
 #             )
 
 t0loop = time.clock()
+#t0loop2 = time.time()
+import cProfile
+cProfile.run("""
 for i in range(0,100):
         op2.par_loop(mass, elements,
              g(op2.INC),
              coords(elem_dofs, op2.READ)
             )
+""", "extrusion43nonExtr_function.dat")
 tloop += time.clock() - t0loop # t is CPU seconds elapsed (floating point)
+#tloop2 = time.time() - t0loop2
 
-ttloop = tloop / 10
-print nums[0], nums[1], nums[2], layers, tloop, duration1, g.data
+#ttloop = tloop / 10
+print nums[0], nums[1], nums[2], layers, duration1, tloop, tloop2, g.data
 
 #print g.data

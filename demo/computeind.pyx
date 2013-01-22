@@ -48,10 +48,10 @@ def compute_ind(np.ndarray[DTYPE_t, ndim=1] nums,
             for k in range(0, len2):
               a3 = <DTYPE_t>A[d][k]*a4
               for l in range(0,wedges):
-                    #ind[count + l * nums[2]*a4*mesh2d[i]] = l + m*a4*(layers - d) + a3 + offset
-              #count+=1
-                    ind[count + l * a4 * mesh2d[i]] = l + m*a4*(layers - d) + a3 + offset
+                    ind[count + l * nums[2]*a4*mesh2d[i]] = l + m*a4*(layers - d) + a3 + offset
               count+=1
+                    #ind[count + l * a4 * mesh2d[i]] = l + m*a4*(layers - d) + a3 + offset
+              #count+=1
             c+=1
           count+= (wedges-d-1)*a4*mesh2d[i]
         elif a4 != 0:

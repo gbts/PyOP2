@@ -396,6 +396,7 @@ class ParLoop(rt.ParLoop):
                                        'extr_loop_close' : _extr_loop_close}
 
         # We need to build with mpicc since that's required by PETSc
+        print code_to_compile
         cc = os.environ.get('CC')
         os.environ['CC'] = 'mpicc'
         _fun = inline_with_numpy(code_to_compile, additional_declarations = kernel_code,

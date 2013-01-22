@@ -85,6 +85,8 @@ class ParLoop(device.ParLoop):
         for c in Const._definitions():
             _args.append(c.data)
 
+
+
         part_size = 1024  #TODO: compute partition size
 
         # Create a plan, for colored execution
@@ -93,6 +95,8 @@ class ParLoop(device.ParLoop):
                                *self._unwound_args,
                                partition_size=part_size,
                                matrix_coloring=True)
+
+
 
         else:
             # Create a fake plan for direct loops.
@@ -114,6 +118,13 @@ class ParLoop(device.ParLoop):
         _args.append(plan.blkmap)
         _args.append(plan.ncolblk)
         _args.append(plan.nelems)
+
+        for arg in self.args:
+            if arg._is_indirect or arg._is_mat:
+                maps = as_tuple(arg.map, Map)
+                for map in maps:
+                   if map.off != None:
+                       _args.append(map.off)
 
         _fun(*_args)
 
@@ -340,6 +351,23 @@ class ParLoop(device.ParLoop):
             }""" % {'combine' : combine,
                     'dim' : arg.data.cdim}
 
+        def extrusion_loop(d):
+            return "for (int j_0=0; j_0<%d; ++j_0){" % d
+
+        def c_off_init(c):
+            return "PyObject *off%(name)s" % {'name' : c }
+
+        def c_off_decl(count):
+            return 'int * _off%(cnt)s = (int *)(((PyArrayObject *)off%(cnt)s)->data)' % { 'cnt' : count }
+
+        def c_add_off(c,layers,count):
+            return """
+            for(int j=0; j<%(layers)s;j++){
+                %(name)s[tid][j] += _off%(num)s[j];
+            }""" % {'name' : c_vec_name(c),
+            'layers' : layers,
+            'num' : count}
+
         args = self.args
         _wrapper_args = ', '.join([c_wrapper_arg(arg) for arg in args])
 
@@ -382,8 +410,34 @@ class ParLoop(device.ParLoop):
         else:
             _const_args = ''
         _const_inits = ';\n'.join([c_const_init(c) for c in Const._definitions()])
+
+        count = 0
+        off_i = []
+        off_d = []
+        off_a = []
+        _off_args = ""
+        _off_inits = ""
+        _apply_offset = ""
+        _extr_loop = ""
+        _extr_loop_close = ""
+        if self._it_space.layers > 1:
+            if not arg._is_mat and arg._is_vec_map:
+                    count += 1
+                    off_i.append(c_off_init(count))
+                    off_d.append(c_off_decl(count))
+                    off_a.append(c_add_off(arg,arg.map.off.size,count))
+            if off_i != []:
+              _off_args = ', '
+              _off_args +=', '.join(off_i)
+              _off_inits = ';\n'.join(off_d)
+              _apply_offset = ' \n'.join(off_a)
+              _extr_loop = '\n'
+              _extr_loop += extrusion_loop(self._it_space.layers-1)
+              _extr_loop_close = '}'
+              _kernel_args += ', j_0'
+
         wrapper = """
-            void wrap_%(kernel_name)s__(%(set_size_wrapper)s, %(wrapper_args)s %(const_args)s, PyObject* _part_size, PyObject* _ncolors, PyObject* _blkmap, PyObject* _ncolblk, PyObject* _nelems) {
+            void wrap_%(kernel_name)s__(%(set_size_wrapper)s, %(wrapper_args)s %(const_args)s, PyObject* _part_size, PyObject* _ncolors, PyObject* _blkmap, PyObject* _ncolblk, PyObject* _nelems %(off_args)s) {
 
             int part_size = (int)PyInt_AsLong(_part_size);
             int ncolors = (int)PyInt_AsLong(_ncolors);
@@ -396,6 +450,7 @@ class ParLoop(device.ParLoop):
             %(const_inits)s;
             %(vec_decs)s;
             %(tmp_decs)s;
+            %(off_inits)s;
 
             #ifdef _OPENMP
             int nthread = omp_get_max_threads();
@@ -427,9 +482,12 @@ class ParLoop(device.ParLoop):
                   for (int i = efirst; i < (efirst + nelem); i++ ) {
                     %(vec_inits)s;
                     %(itspace_loops)s
+                    %(extr_loop)s
                     %(zero_tmps)s;
                     %(kernel_name)s(%(kernel_args)s);
                     %(addtos_vector_field)s;
+                    %(apply_offset)s
+                    %(extr_loop_close)s
                     %(itspace_loop_close)s
                     %(addtos_scalar_field)s;
                   }
@@ -471,9 +529,15 @@ class ParLoop(device.ParLoop):
                                        'assembles' : _assembles,
                                        'reduction_decs' : _reduction_decs,
                                        'reduction_inits' : _reduction_inits,
-                                       'reduction_finalisations' : _reduction_finalisations}
+                                       'reduction_finalisations' : _reduction_finalisations,
+                                       'apply_offset' : _apply_offset,
+                                       'off_args' : _off_args,
+                                       'off_inits' : _off_inits,
+                                       'extr_loop' : _extr_loop,
+                                       'extr_loop_close' : _extr_loop_close}
 
         # We need to build with mpicc since that's required by PETSc
+        #print code_to_compile
         cc = os.environ.get('CC')
         os.environ['CC'] = 'mpicc'
         _fun = inline_with_numpy(code_to_compile, additional_declarations = kernel_code,
