@@ -67,12 +67,15 @@ layers = int(opt['layers'])
 
 # Generate code for kernel
 mass = op2.Kernel("""
-void comp_vol(double A[1], double *x[])
+void comp_vol(double A[1], double *x[], double *y[])
 {
     double abs = x[0][0]*(x[2][1]-x[4][1])+x[2][0]*(x[4][1]-x[0][1])+x[4][0]*(x[0][1]-x[2][1]);
-    if (abs < 0)
+    double abs2 = y[0][0]*(y[2][1]-y[4][1])+y[2][0]*(y[4][1]-y[0][1])+y[4][0]*(y[0][1]-y[2][1]);
+    if (abs < 0){
       abs = abs * (-1.0);
-    A[0]+=0.5*abs*0.1;
+      abs2 = abs2 * (-1.0);
+    }
+    A[0]+=0.5*(abs+abs2)*0.1;
     //printf(" rez %f   acc %f \\n", 0.5*abs*0.1, A[0]);
     //getchar();
 }""","comp_vol");
@@ -217,7 +220,7 @@ dofsSet = op2.Set(no_dofs,"dofsSet")
 
 #the dat has to be based on dofs not specific mesh elements
 coords = op2.Dat(dofsSet, 1, dat, np.float64, "coords")
-
+coords2 = op2.Dat(dofsSet, 1, dat, np.float64, "coords2")
 ### THE MAP from the ind
 #create the map from element to dofs for each element in the 3D mesh
 lsize= nums[2]*(layers-1)*map_dofs
@@ -249,6 +252,7 @@ ind = compute_ind(nums,map_dofs,lins,layers,mesh2d,dofs,A,wedges,mapp,lsize)
 #print "duration2 = %f" % tind
 
 elem_dofs = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs");
+elem_dofs2 = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs2");
 #print ind.size
 #print dat.size
 #print nums[2]
@@ -276,17 +280,18 @@ tloop2 = 0
 #             )
 
 t0loop = time.clock()
-#t0loop2 = time.time()
+t0loop2 = time.time()
 import cProfile
 cProfile.run("""
 for i in range(0,100):
         op2.par_loop(mass, elements,
              g(op2.INC),
-             coords(elem_dofs, op2.READ)
+             coords(elem_dofs, op2.READ),
+             coords2(elem_dofs2, op2.READ)
             )
 """, "extrusion43nonExtr_function.dat")
 tloop += time.clock() - t0loop # t is CPU seconds elapsed (floating point)
-#tloop2 = time.time() - t0loop2
+tloop2 = time.time() - t0loop2
 
 #ttloop = tloop / 10
 print nums[0], nums[1], nums[2], layers, duration1, tloop, tloop2, g.data

@@ -87,7 +87,7 @@ class ParLoop(device.ParLoop):
 
 
 
-        part_size = 1024  #TODO: compute partition size
+        part_size = 60  #TODO: compute partition size
 
         # Create a plan, for colored execution
         if [arg for arg in self.args if arg._is_indirect or arg._is_mat]:
