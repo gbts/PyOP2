@@ -67,15 +67,17 @@ layers = int(opt['layers'])
 
 # Generate code for kernel
 mass = op2.Kernel("""
-void comp_vol(double A[1], double *x[], double *y[])
+void comp_vol(double A[1], double *x[], double *y[], double *z[])
 {
     double abs = x[0][0]*(x[2][1]-x[4][1])+x[2][0]*(x[4][1]-x[0][1])+x[4][0]*(x[0][1]-x[2][1]);
     double abs2 = y[0][0]*(y[2][1]-y[4][1])+y[2][0]*(y[4][1]-y[0][1])+y[4][0]*(y[0][1]-y[2][1]);
+    double abs3 = z[0][0]*(z[2][1]-z[4][1])+z[2][0]*(z[4][1]-z[0][1])+z[4][0]*(z[0][1]-z[2][1]);
     if (abs < 0){
       abs = abs * (-1.0);
       abs2 = abs2 * (-1.0);
+      abs3 = abs3 * (-1.0);
     }
-    A[0]+=0.5*(abs+abs2)*0.1;
+    A[0]+=0.5*(abs+abs2+abs3)*0.1;
     //printf(" rez %f   acc %f \\n", 0.5*abs*0.1, A[0]);
     //getchar();
 }""","comp_vol");
@@ -221,6 +223,7 @@ dofsSet = op2.Set(no_dofs,"dofsSet")
 #the dat has to be based on dofs not specific mesh elements
 coords = op2.Dat(dofsSet, 1, dat, np.float64, "coords")
 coords2 = op2.Dat(dofsSet, 1, dat, np.float64, "coords2")
+coords3 = op2.Dat(dofsSet, 1, dat, np.float64, "coords3")
 ### THE MAP from the ind
 #create the map from element to dofs for each element in the 3D mesh
 lsize= nums[2]*(layers-1)*map_dofs
@@ -253,6 +256,7 @@ ind = compute_ind(nums,map_dofs,lins,layers,mesh2d,dofs,A,wedges,mapp,lsize)
 
 elem_dofs = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs");
 elem_dofs2 = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs2");
+elem_dofs3 = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs3");
 #print ind.size
 #print dat.size
 #print nums[2]
@@ -287,7 +291,8 @@ for i in range(0,100):
         op2.par_loop(mass, elements,
              g(op2.INC),
              coords(elem_dofs, op2.READ),
-             coords2(elem_dofs2, op2.READ)
+             coords2(elem_dofs2, op2.READ),
+             coords3(elem_dofs3, op2.READ)
             )
 """, "extrusion43nonExtr_function.dat")
 tloop += time.clock() - t0loop # t is CPU seconds elapsed (floating point)

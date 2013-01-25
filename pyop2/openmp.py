@@ -87,7 +87,7 @@ class ParLoop(device.ParLoop):
 
 
 
-        part_size = 60  #TODO: compute partition size
+        part_size = 10  #TODO: compute partition size
 
         # Create a plan, for colored execution
         if [arg for arg in self.args if arg._is_indirect or arg._is_mat]:
@@ -474,7 +474,7 @@ class ParLoop(device.ParLoop):
               {
                 int tid = omp_get_thread_num();
 
-                #pragma omp for schedule(static)
+                #pragma omp for nowait schedule(static)
                 for ( int __b = boffset; __b < (boffset + nblocks); __b++ ) {
                   int bid = blkmap[__b];
                   int nelem = nelems[bid];
