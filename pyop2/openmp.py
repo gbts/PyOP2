@@ -87,7 +87,7 @@ class ParLoop(device.ParLoop):
 
 
 
-        part_size = 10  #TODO: compute partition size
+        part_size = 30  #TODO: compute partition size
 
         # Create a plan, for colored execution
         if [arg for arg in self.args if arg._is_indirect or arg._is_mat]:
@@ -185,7 +185,7 @@ class ParLoop(device.ParLoop):
         def c_kernel_arg(arg):
             if arg._uses_itspace:
                 if arg._is_mat:
-                    name = "p_%s[tid]" % c_arg_name(arg)
+                    name = "p_%s[tid]" % c_arg_name(arg) # "p_%s[tid]" % c_arg_name(arg)
                     if arg.data._is_vector_field:
                         return name
                     elif arg.data._is_scalar_field:
@@ -200,10 +200,10 @@ class ParLoop(device.ParLoop):
                     return c_ind_data(arg, "i_%d" % arg.idx.index)
             elif arg._is_indirect:
                 if arg._is_vec_map:
-                    return "%s[tid]" % c_vec_name(arg)
+                    return "%s" % c_vec_name(arg) #"%s[tid]" % c_vec_name(arg)
                 return c_ind_data(arg, arg.idx)
             elif arg._is_global_reduction:
-                return "%(name)s_l[tid]" % {
+                return "%(name)s_l1[0]" % { #"%(name)s_l1[tid]" % {
                   'name' : c_arg_name(arg)}
             elif isinstance(arg.data, Global):
                 return c_arg_name(arg)
@@ -215,7 +215,7 @@ class ParLoop(device.ParLoop):
         def c_vec_dec(arg):
             val = []
             if arg._is_vec_map:
-                val.append(";\n%(type)s *%(vec_name)s[%(max_threads)s][%(dim)s]" % \
+                val.append(";\n%(type)s *%(vec_name)s[%(dim)s]" % #val.append(";\n%(type)s *%(vec_name)s[%(max_threads)s][%(dim)s]"
                        {'type' : arg.ctype,
                         'vec_name' : c_vec_name(arg),
                         'dim' : arg.map.dim,
@@ -225,7 +225,7 @@ class ParLoop(device.ParLoop):
         def c_vec_init(arg):
             val = []
             for i in range(arg.map._dim):
-                val.append("%(vec_name)s[tid][%(idx)s] = %(data)s" %
+                val.append("%(vec_name)s[%(idx)s] = %(data)s" % # val.append("%(vec_name)s[tid][%(idx)s] = %(data)s" %
                            {'vec_name' : c_vec_name(arg),
                             'idx' : i,
                             'data' : c_ind_data(arg, i)} )
@@ -351,6 +351,24 @@ class ParLoop(device.ParLoop):
             }""" % {'combine' : combine,
                     'dim' : arg.data.cdim}
 
+        def c_interm_globals_decl(arg):
+            return "%(type)s %(name)s_l1[1][1]" % \
+              {'type' : arg.ctype,
+               'name' : c_arg_name(arg)
+              }
+
+        def c_interm_globals_init(arg):
+            return "%(name)s_l1[0][0] = 0" % \
+              {
+               'name' : c_arg_name(arg)
+              }
+
+        def c_interm_globals_writeback(arg):
+            return "%(name)s_l[tid][0] = %(name)s_l1[0][0]" % \
+              {
+               'name' : c_arg_name(arg)
+              }
+
         def extrusion_loop(d):
             return "for (int j_0=0; j_0<%d; ++j_0){" % d
 
@@ -363,10 +381,30 @@ class ParLoop(device.ParLoop):
         def c_add_off(c,layers,count):
             return """
             for(int j=0; j<%(layers)s;j++){
-                %(name)s[tid][j] += _off%(num)s[j];
+                %(name)s[j] += _off%(num)s[j];
             }""" % {'name' : c_vec_name(c),
             'layers' : layers,
             'num' : count}
+
+        def c_rewrite_dats(arg):
+            return """
+            double * %(name)s_mp = (double *)malloc(%(size)s*sizeof(double));
+            """ % {
+                'name' : c_arg_name(arg),
+                'size' : arg.data.dat_size
+                }
+
+
+        def c_rewrite_data_parallel(arg):
+            return """
+            #pragma omp parallel for default(shared)
+            for(int i = 0; i < %(size)s; i++){
+                %(name)s_mp[i] =  %(name)s[i];
+            }
+            """ %{
+                'name' : c_arg_name(arg),
+                'size' : arg.data.dat_size
+                }
 
         args = self.args
         _wrapper_args = ', '.join([c_wrapper_arg(arg) for arg in args])
@@ -404,6 +442,14 @@ class ParLoop(device.ParLoop):
         _reduction_inits = ';\n'.join([c_reduction_init(arg) for arg in args if arg._is_global_reduction])
         _reduction_finalisations = '\n'.join([c_reduction_finalisation(arg) for arg in args if arg._is_global_reduction])
 
+        _interm_globals_decl = ';\n'.join([c_interm_globals_decl(arg) for arg in args if arg._is_global_reduction])
+        _interm_globals_init = ';\n'.join([c_interm_globals_init(arg) for arg in args if arg._is_global_reduction])
+        _interm_globals_writeback = ';\n'.join([c_interm_globals_writeback(arg) for arg in args if arg._is_global_reduction])
+
+        _rewrite_dats = ';\n'.join([c_rewrite_dats(arg) for arg in args if not arg._is_mat and arg._is_vec_map])
+
+        _rewrite_data_parallel = ';\n'.join([c_rewrite_data_parallel(arg) for arg in args if not arg._is_mat and arg._is_vec_map])
+
         if len(Const._defs) > 0:
             _const_args = ', '
             _const_args += ', '.join([c_const_arg(c) for c in Const._definitions()])
@@ -412,6 +458,8 @@ class ParLoop(device.ParLoop):
         _const_inits = ';\n'.join([c_const_init(c) for c in Const._definitions()])
 
         count = 0
+        _dd = "%d"
+        _ff = "%f"
         off_i = []
         off_d = []
         off_a = []
@@ -421,7 +469,8 @@ class ParLoop(device.ParLoop):
         _extr_loop = ""
         _extr_loop_close = ""
         if self._it_space.layers > 1:
-            if not arg._is_mat and arg._is_vec_map:
+            for arg in args:
+                if not arg._is_mat and arg._is_vec_map:
                     count += 1
                     off_i.append(c_off_init(count))
                     off_d.append(c_off_decl(count))
@@ -448,9 +497,10 @@ class ParLoop(device.ParLoop):
             %(set_size_dec)s;
             %(wrapper_decs)s;
             %(const_inits)s;
-            %(vec_decs)s;
+
             %(tmp_decs)s;
             %(off_inits)s;
+
 
             #ifdef _OPENMP
             int nthread = omp_get_max_threads();
@@ -469,16 +519,21 @@ class ParLoop(device.ParLoop):
             int boffset = 0;
             for ( int __col  = 0; __col < ncolors; __col++ ) {
               int nblocks = ncolblk[__col];
-
-              #pragma omp parallel default(shared)
+              //printf("Colour %(dd)s has %(dd)s partitions\\n", __col, nblocks);
+              #pragma omp parallel shared(boffset, nblocks, blkmap, nelems, part_size)
               {
+                %(vec_decs)s;
                 int tid = omp_get_thread_num();
+                %(interm_globals_decl)s;
+                %(interm_globals_init)s;
 
-                #pragma omp for nowait schedule(static)
-                for ( int __b = boffset; __b < (boffset + nblocks); __b++ ) {
+                #pragma omp for schedule(static)
+                for (int __b = boffset; __b < (boffset + nblocks); __b++ ) {
+                  {
                   int bid = blkmap[__b];
                   int nelem = nelems[bid];
                   int efirst = bid * part_size;
+                  //printf("Thread %(dd)s on cpu %(dd)s \\n", tid, sched_getcpu());
                   for (int i = efirst; i < (efirst + nelem); i++ ) {
                     %(vec_inits)s;
                     %(itspace_loops)s
@@ -491,12 +546,16 @@ class ParLoop(device.ParLoop):
                     %(itspace_loop_close)s
                     %(addtos_scalar_field)s;
                   }
+                  }
                 }
+                %(interm_globals_writeback)s;
+                //printf("Result: %(ff)s out of %(ff)s\\n", g_l[tid][0], g[0]);
               }
               %(reduction_finalisations)s
               boffset += nblocks;
             }
             %(assembles)s;
+            ;
           }"""
 
         if any(arg._is_soa for arg in args):
@@ -534,10 +593,20 @@ class ParLoop(device.ParLoop):
                                        'off_args' : _off_args,
                                        'off_inits' : _off_inits,
                                        'extr_loop' : _extr_loop,
-                                       'extr_loop_close' : _extr_loop_close}
+                                       'extr_loop_close' : _extr_loop_close,
+                                       'interm_globals_decl' : _interm_globals_decl,
+                                       'interm_globals_init' : _interm_globals_init,
+                                       'interm_globals_writeback' : _interm_globals_writeback,
+                                       #'rewrite_dats' : _rewrite_dats,
+                                       #'rewrite_data_parallel' : _rewrite_data_parallel,
+                                       'dd' : _dd,
+                                       'ff' : _ff}
 
         # We need to build with mpicc since that's required by PETSc
-        #print code_to_compile
+
+
+
+        print code_to_compile
         cc = os.environ.get('CC')
         os.environ['CC'] = 'mpicc'
         _fun = inline_with_numpy(code_to_compile, additional_declarations = kernel_code,

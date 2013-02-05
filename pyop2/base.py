@@ -352,6 +352,7 @@ class Dat(DataCarrier):
         self._soa = bool(soa)
         self._name = name or "dat_%d" % Dat._globalcount
         self._lib_handle = None
+        self._dat_size = None
         Dat._globalcount += 1
 
     @validate_in(('access', _modes, ModeValueError))
@@ -395,6 +396,14 @@ class Dat(DataCarrier):
     def dim(self):
         '''The number of values at each member of the dataset.'''
         return self._dim
+
+    @property
+    def dat_size(self):
+        '''The number of values at each member of the dataset.'''
+        return self._dat_size
+
+    def setDatSize(self, dat_size):
+        self._dat_size = dat_size
 
     @property
     def norm(self):
