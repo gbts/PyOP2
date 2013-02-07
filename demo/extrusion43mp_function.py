@@ -202,17 +202,17 @@ nums[1] = k #number of edges
 
 ### construct the initial indeces ONCE
 ### construct the offset array ONCE
-off = np.array([], dtype = np.int32)
-
+off = np.zeros(map_dofs, dtype = np.int32)
 ### THE OFFSET array
 #for 2D and 3D
+count = 0
 for d in range(0,2): #for 2D and then for 3D
   for i in range(0,len(mesh2d)): # over [3,3,1]
     for j in range(0,mesh2d[i]):
       for k in range(0,len(A[d])):
         if dofs[i][d]!=0:
-          off = np.append(off,dofs[i][d])
-#print off
+            off[count] = dofs[i][d]
+            count+=1
 
 #assemble the dat
 #compute total number of dofs in the 3D mesh

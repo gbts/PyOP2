@@ -87,12 +87,14 @@ mass = op2.Kernel("""
 void comp_vol(double A[1], double *x[], int j)
 {
     double abs = x[0][0]*(x[2][1]-x[4][1])+x[2][0]*(x[4][1]-x[0][1])+x[4][0]*(x[0][1]-x[2][1]);
+    double abs2 = 0.0; //x[8][1]-x[8][0] + x[6][1]-x[6][0] + x[10][1]-x[10][0];
+    double abs3 = x[12][0]*(x[13][1]-x[14][1])+x[13][0]*(x[14][1]-x[12][1])+x[14][0]*(x[12][1]-x[13][1]);
     if (abs < 0){
       abs = abs * (-1.0);
+      abs3 = abs3 * (-1.0);
     }
-    A[0]+=0.5*(abs+abs2+abs3)*0.1;
+    A[0]+=0.5*(abs+abs3)*0.1;
 }""","comp_vol");
-
 
 
 # Set up simulation data structures
@@ -107,7 +109,7 @@ mesh1d = np.array([2,1])
 A = np.array([[0,1],[0]])
 
 #the array of dof values for each element type
-dofs = np.array([[2,0],[0,0],[0,0]])
+dofs = np.array([[2,2],[4,0],[0,3]])
 
 #ALL the nodes, edges amd cells of the 2D mesh
 nums = np.array([nodes.size,0,elements.size])
@@ -192,6 +194,7 @@ nums[1] = k #number of edges
 
 ### construct the initial indeces ONCE
 ### construct the offset array ONCE
+
 off = np.zeros(map_dofs, dtype = np.int32)
 ### THE OFFSET array
 #for 2D and 3D
@@ -203,6 +206,8 @@ for d in range(0,2): #for 2D and then for 3D
         if dofs[i][d]!=0:
             off[count] = dofs[i][d]
             count+=1
+#from IPython import embed
+#embed()
 
 #assemble the dat
 #compute total number of dofs in the 3D mesh
@@ -212,15 +217,22 @@ no_dofs = np.dot(nums,dofs.transpose()[0])*layers + wedges * np.dot(dofs.transpo
 #THE DAT
 ###
 dat = np.zeros(np.dot(sum(np.dot(nums.reshape(1,3),dofs)),np.array([layers,layers-1])))
-
 t0dat = time.clock()
 count = 0
 for d in range(0,2): #for 2D and then for 3D
   for i in range(0,len(mesh2d)): # over [3,3,1]
+    enter = 0
+    if i == 0:
+      for k in range(0, nums[i]):
+        for k1 in range(0, layers-d):
+          for l in range(0, dofs[i][d]):
+            dat[count] = coords.data[k][l]
+            count+=1
+    else:
       for k in range(0, nums[i]):
         for k1 in range(0,layers-d):
           for l in range(0,dofs[i][d]):
-            dat[count] = coords.data[k][l]
+            dat[count] = 0.0001*l #coords.data[k][l]
             count+=1
 tdat = time.clock() - t0dat
 
@@ -240,6 +252,11 @@ coords = op2.Dat(dofsSet, 1, dat, np.float64, "coords")
 #create the map from element to dofs for each element in the 2D mesh
 lsize = nums[2]*map_dofs
 ind = compute_ind_extr(nums,map_dofs,lins,layers,mesh2d,dofs,A,wedges,mapp,lsize)
+
+#print "ind"
+#for i in range(0,15):
+#    print ind[i+15], dat[ind[i]], dat[ind[i]+1]
+
 
 #SWAP ind entries for performance
 #k = 10 #depth
@@ -279,6 +296,7 @@ ind = compute_ind_extr(nums,map_dofs,lins,layers,mesh2d,dofs,A,wedges,mapp,lsize
 #print "size of ind = %d" % ind.size
 #print "size of ind = %d" % ppp
 # Create the map from elements to dofs
+
 elem_dofs = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs",off);
 
 #elem_dofs2 = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs2",off);
