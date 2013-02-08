@@ -68,26 +68,10 @@ layers = int(opt['layers'])
 # Generate code for kernel
 
 mass = op2.Kernel("""
-void comp_vol(double A[1], double *x[], double *y[], double *z[], int j)
-{
-    double abs = x[0][0]*(x[2][1]-x[4][1])+x[2][0]*(x[4][1]-x[0][1])+x[4][0]*(x[0][1]-x[2][1]);
-    double abs2 = y[0][0]*(y[2][1]-y[4][1])+y[2][0]*(y[4][1]-y[0][1])+y[4][0]*(y[0][1]-y[2][1]);
-    double abs3 = z[0][0]*(z[2][1]-z[4][1])+z[2][0]*(z[4][1]-z[0][1])+z[4][0]*(z[0][1]-z[2][1]);
-    if (abs < 0){
-      abs = abs * (-1.0);
-      abs2 = abs2 * (-1.0);
-      abs3 = abs3 * (-1.0);
-    }
-    A[0]+=0.5*(abs+abs2+abs3)*0.1;
-    //printf(" rez %f   acc %f \\n", 0.5*abs*0.1, A[0]);
-    //getchar();
-}""","comp_vol");
-
-mass = op2.Kernel("""
 void comp_vol(double A[1], double *x[], int j)
 {
     double abs = x[0][0]*(x[2][1]-x[4][1])+x[2][0]*(x[4][1]-x[0][1])+x[4][0]*(x[0][1]-x[2][1]);
-    double abs2 = 0.0; //x[8][1]-x[8][0] + x[6][1]-x[6][0] + x[10][1]-x[10][0];
+    double abs2 = x[8][1]-x[8][0] + x[6][1]-x[6][0] + x[10][1]-x[10][0];
     double abs3 = x[12][0]*(x[13][1]-x[14][1])+x[13][0]*(x[14][1]-x[12][1])+x[14][0]*(x[12][1]-x[13][1]);
     if (abs < 0){
       abs = abs * (-1.0);
@@ -193,7 +177,6 @@ nums[1] = k #number of edges
 
 ### construct the initial indeces ONCE
 ### construct the offset array ONCE
-#off = np.array([], dtype = np.int32)
 off = np.zeros(map_dofs, dtype = np.int32)
 ### THE OFFSET array
 #for 2D and 3D
@@ -205,7 +188,6 @@ for d in range(0,2): #for 2D and then for 3D
         if dofs[i][d]!=0:
             off[count] = dofs[i][d]
             count+=1
-          #off = np.append(off,dofs[i][d])
 #from IPython import embed
 #embed()
 
@@ -243,10 +225,6 @@ dofsSet = op2.Set(no_dofs,"dofsSet")
 #the dat has to be based on dofs not specific mesh elements
 coords = op2.Dat(dofsSet, 1, dat, np.float64, "coords")
 
-#coords2 = op2.Dat(dofsSet, 1, dat, np.float64, "coords2")
-
-#coords3 = op2.Dat(dofsSet, 1, dat, np.float64, "coords3")
-
 
 ### THE MAP from the ind
 #create the map from element to dofs for each element in the 2D mesh
@@ -269,7 +247,6 @@ ind = compute_ind_extr(nums,map_dofs,lins,layers,mesh2d,dofs,A,wedges,mapp,lsize
 #ind = swap_ind_entries(ind, k, map_dofs,lsize,ahead,my_cache,same)
 
 #print "swaps = %d" % swaps
-
 
 #ind = np.zeros(nums[2]*map_dofs, dtype=np.int32)
 #count = 0
@@ -299,10 +276,6 @@ ind = compute_ind_extr(nums,map_dofs,lins,layers,mesh2d,dofs,A,wedges,mapp,lsize
 
 elem_dofs = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs",off);
 
-#elem_dofs2 = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs2",off);
-
-#elem_dofs3 = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs3",off);
-
 
 ### THE RESULT ARRAY
 g = op2.Global(1, data=0.0, name='g')
@@ -330,7 +303,7 @@ for i in range(0,100):
              g(op2.INC),
              coords(elem_dofs, op2.READ)
             )
-""", "extrusion43_function.dat")
+""", "extrusion43mp_real.dat")
 tloop += time.clock() - t0loop # t is CPU seconds elapsed (floating point)
 tloop2 = time.time() - t0loop2
 

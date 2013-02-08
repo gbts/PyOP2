@@ -79,8 +79,6 @@ void comp_vol(double A[1], double *x[], int j)
     if (abs < 0)
       abs = abs * (-1.0);
     A[0]+=0.5*abs*0.1;
-    //printf(" rez %f   acc %f \\n", 0.5*abs*0.1, A[0]);
-    //getchar();
 }""","comp_vol");
 
 #mass = op2.Kernel("""
@@ -148,7 +146,6 @@ for d in range(0,2):
 
 
 ### EXTRUSION DETAILS
-#layers = 11
 wedges = layers - 1
 
 ### NEW MAP

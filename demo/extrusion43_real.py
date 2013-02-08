@@ -330,7 +330,7 @@ for i in range(0,100):
              g(op2.INC),
              coords(elem_dofs, op2.READ)
             )
-""", "extrusion43_function.dat")
+""", "extrusion43_real.dat")
 tloop += time.clock() - t0loop # t is CPU seconds elapsed (floating point)
 tloop2 = time.time() - t0loop2
 

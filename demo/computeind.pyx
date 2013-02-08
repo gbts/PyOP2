@@ -86,7 +86,6 @@ def compute_ind_extr(np.ndarray[DTYPE_t, ndim=1] nums,
   cdef int len2
 
 
-
   for mm in range(0,lins):
     offset = 0
     for d in range(0,2):
@@ -101,7 +100,7 @@ def compute_ind_extr(np.ndarray[DTYPE_t, ndim=1] nums,
               ind[count] = m*a4*(layers - d) + <DTYPE_t>A[d][k]*a4 + offset
               count+=1
             c+=1
-        elif a4 != 0:
+        elif dofs[i, 1-d] != 0:
           c+= <unsigned int>mesh2d[i]
         offset += a4*nums[i]*(layers - d)
   return ind

@@ -96,8 +96,6 @@ class ParLoop(device.ParLoop):
                                partition_size=part_size,
                                matrix_coloring=True)
 
-
-
         else:
             # Create a fake plan for direct loops.
             # Make the fake plan according to the number of cores available
@@ -501,7 +499,7 @@ class ParLoop(device.ParLoop):
             %(tmp_decs)s;
             %(off_inits)s;
 
-
+            //printf("-1\\n");
             #ifdef _OPENMP
             int nthread = omp_get_max_threads();
             #else
@@ -515,7 +513,7 @@ class ParLoop(device.ParLoop):
               int tid = omp_get_thread_num();
               %(reduction_inits)s;
             }
-
+            //printf("0\\n");
             int boffset = 0;
             for ( int __col  = 0; __col < ncolors; __col++ ) {
               int nblocks = ncolblk[__col];
@@ -533,6 +531,7 @@ class ParLoop(device.ParLoop):
                   int bid = blkmap[__b];
                   int nelem = nelems[bid];
                   int efirst = bid * part_size;
+                  //printf("1\\n");
                   //printf("Thread %(dd)s on cpu %(dd)s \\n", tid, sched_getcpu());
                   for (int i = efirst; i < (efirst + nelem); i++ ) {
                     %(vec_inits)s;
@@ -550,9 +549,11 @@ class ParLoop(device.ParLoop):
                 }
                 %(interm_globals_writeback)s;
                 //printf("Result: %(ff)s out of %(ff)s\\n", g_l[tid][0], g[0]);
+                //printf("2\\n");
               }
               %(reduction_finalisations)s
               boffset += nblocks;
+              //printf("3\\n");
             }
             %(assembles)s;
             ;
@@ -603,10 +604,7 @@ class ParLoop(device.ParLoop):
                                        'ff' : _ff}
 
         # We need to build with mpicc since that's required by PETSc
-
-
-
-        print code_to_compile
+        #print code_to_compile
         cc = os.environ.get('CC')
         os.environ['CC'] = 'mpicc'
         _fun = inline_with_numpy(code_to_compile, additional_declarations = kernel_code,
@@ -620,6 +618,7 @@ class ParLoop(device.ParLoop):
                                  cppargs=['-fopenmp'],
                                  system_headers=['omp.h'],
                                  lddargs=['-fopenmp'])
+
         if cc:
             os.environ['CC'] = cc
         else:
