@@ -73,6 +73,10 @@ void comp_vol(double A[1], double *x[], int j)
     double abs = x[0][0]*(x[2][1]-x[4][1])+x[2][0]*(x[4][1]-x[0][1])+x[4][0]*(x[0][1]-x[2][1]);
     double abs2 = x[8][1]-x[8][0] + x[6][1]-x[6][0] + x[10][1]-x[10][0];
     double abs3 = x[12][0]*(x[13][1]-x[14][1])+x[13][0]*(x[14][1]-x[12][1])+x[14][0]*(x[12][1]-x[13][1]);
+    int c = 0;
+    for(int i=0; i<10000000000; i++){
+        c++;
+    }
     if (abs < 0){
       abs = abs * (-1.0);
       abs3 = abs3 * (-1.0);
@@ -81,6 +85,7 @@ void comp_vol(double A[1], double *x[], int j)
 }""","comp_vol");
 
 
+t0ind= time.clock()
 # Set up simulation data structures
 
 valuetype=np.float64
@@ -140,7 +145,7 @@ mappp = mappp.reshape(-1,3)
 lins,cols = mappp.shape
 mapp=np.empty(shape=(lins,), dtype=object)
 
-t0ind= time.clock()
+
 ### DERIVE THE MAP FOR THE EDGES
 edg = np.empty(shape = (nums[0],),dtype=object)
 for i in range(0, nums[0]):

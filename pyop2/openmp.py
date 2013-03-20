@@ -87,7 +87,7 @@ class ParLoop(device.ParLoop):
 
 
 
-        part_size = 30  #TODO: compute partition size
+        part_size = 3000  #TODO: compute partition size
 
         # Create a plan, for colored execution
         if [arg for arg in self.args if arg._is_indirect or arg._is_mat]:
@@ -118,7 +118,8 @@ class ParLoop(device.ParLoop):
         _args.append(plan.nelems)
 
         for arg in self.args:
-            if arg._is_indirect or arg._is_mat:
+            if  self._it_space.layers > 1:
+              if arg._is_indirect or arg._is_mat:
                 maps = as_tuple(arg.map, Map)
                 for map in maps:
                    if map.off != None:
@@ -544,6 +545,12 @@ class ParLoop(device.ParLoop):
                     %(extr_loop_close)s
                     %(itspace_loop_close)s
                     %(addtos_scalar_field)s;
+
+                    //if (bid < 10)
+                    //    colours_vec[0][0] = bid;
+                    //else
+                    //    colours_vec[0][0] = 10;
+                    colours_vec[0][0] = __col;
                   }
                   }
                 }

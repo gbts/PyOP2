@@ -56,7 +56,8 @@ def read_triangle(f):
                 continue
             vals = line.strip('\n').split(' ')
             node = int(vals[0])-1
-            x, y = [ float(x) for x in vals[1:3] ]
+            #print vals
+            x, y = [ float(x) for x in [vals[3], vals[5]] ]
             node_values[node] = (x,y)
 
     nodes = op2.Set(num_nodes,"nodes")
@@ -64,13 +65,17 @@ def read_triangle(f):
 
     # Read elements
     with open(f+'.ele') as h:
+        ll = h.readline().strip('\n').split(' ')
+        fin_ll = [x  for x in ll if x != '']
+        #print fin_ll
         num_tri, nodes_per_tri, num_attrs = \
-            map(lambda x: int(x), h.readline().strip('\n').split(' '))
+            map(lambda x: int(x), fin_ll)#h.readline().strip('\n').split(' '))
         map_values = [0]*num_tri
         for line in h:
             if line[0] == '#':
                 continue
-            vals = line.strip('\n').split(' ')
+            vals = [ x for x in line.strip('\n').split(' ') if x !='']
+            #print vals
             tri = int(vals[0])
             ele_nodes = [ int(x)-1 for x in vals[1:nodes_per_tri+1] ]
             map_values[tri-1] = ele_nodes

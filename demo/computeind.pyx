@@ -54,7 +54,7 @@ def compute_ind(np.ndarray[DTYPE_t, ndim=1] nums,
               #count+=1
             c+=1
           #count+= (wedges-d-1)*a4*mesh2d[i]
-        elif a4 != 0:
+        elif dofs[i, 1-d] != 0:
           c+= <unsigned int>mesh2d[i]
         offset += a4*nums[i]*(layers - d)
   return ind
@@ -158,7 +158,55 @@ def swap_ind_entries(np.ndarray[DTYPE_t, ndim=1] ind,
   print "swaps = %d" % swaps
   return ind
 
+@cython.boundscheck(False)
+def swap_ind_entries_batch(np.ndarray[DTYPE_t, ndim=1] ind,
+                    ITYPE_t k,
+                    ITYPE_t map_dofs,
+                    ITYPE_t lsize,
+                    ITYPE_t ahead,
+                    np.ndarray[int, ndim=1] my_cache,
+                    ITYPE_t same):
+  cdef unsigned int sw = 0 + map_dofs
+  cdef unsigned int found = 0
+  cdef unsigned int i,j,m,l,n
+  cdef unsigned int pos = 0
+  cdef unsigned int swaps = 0
+  for i in range(0, lsize, map_dofs):
+    sw = i + map_dofs
+    pos = 0
+    for j in range(i+map_dofs, lsize, map_dofs):
+            found = 0
+            for m in range(0,map_dofs):
+                look_for = ind[j + m]
+                for n in range(0, map_dofs):
+                    if ind[i + n] == look_for:
+                            found += 1
+                            break
 
+            if found >= same:
+                #found a candidate so swap
+                swaps += 1
+                pos += 1
+
+                #if sw < 20*6:
+                #    ssw = sw / 6
+                #    jj = j / 6
+                #    print "swap to %d the ind at" % ssw
+                #    print "----------------------> %d " % jj
+                #    print ind[i:i+map_dofs], ind[j:j+map_dofs]
+
+                for n in range(0, map_dofs):
+                    aux = ind[j + n]
+                    ind[j + n] = ind[sw + n]
+                    ind[sw + n] = aux
+                sw += map_dofs
+    #if sw < 120:
+    #    print "done triangle"
+    #if swaps < 1000:
+    #    print "swaps = %d" % swaps
+    i += pos * map_dofs
+  print "swaps = %d" % swaps
+  return ind
 
 #cdef data_to_numpy_array_with_spec(void * ptr, np.npy_intp size, int t):
 #    """Return an array of SIZE elements (each of type T) with data from PTR."""
