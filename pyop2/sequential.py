@@ -339,16 +339,24 @@ class ParLoop(rt.ParLoop):
               _extr_loop += extrusion_loop(self._it_space.layers-1)
               _extr_loop_close = '}'
               _kernel_args += ', j_0'
-
+#//printf(" %%d \\n", likwid_init);
         wrapper = """
+
             void wrap_%(kernel_name)s__(%(set_size_wrapper)s, %(wrapper_args)s %(const_args)s %(off_args)s) {
             %(set_size_dec)s;
             %(wrapper_decs)s;
             %(tmp_decs)s;
             %(const_inits)s;
             %(off_inits)s;
+            if (likwid_init == 0){
+                likwid_markerInit();
+            }
+
+            likwid_markerStartRegion("accumulate");
             for ( int i = 0; i < %(set_size)s; i++ ) {
+
             %(vec_inits)s;
+
             %(itspace_loops)s
             %(extr_loop)s
             %(zero_tmps)s;
@@ -358,19 +366,32 @@ class ParLoop(rt.ParLoop):
             %(extr_loop_close)s
             %(itspace_loop_close)s
             %(addtos_scalar_field)s;
+
             }
+            likwid_markerStopRegion("accumulate");
         %(assembles)s;
+
+            if (likwid_init == 99){
+                likwid_markerClose();
+            }
+            likwid_init++;
             }"""
 
         if any(arg._is_soa for arg in args):
             kernel_code = """
+            #include <likwid.h>
             #define OP2_STRIDE(a, idx) a[idx]
+            static int likwid_init = 0;
             inline %(code)s
             #undef OP2_STRIDE
+
             """ % {'code' : self._kernel.code}
         else:
             kernel_code = """
+            #include <likwid.h>
+            static int likwid_init = 0;
             inline %(code)s
+
             """ % {'code' : self._kernel.code }
         code_to_compile =  wrapper % { 'kernel_name' : self._kernel.name,
                                        'wrapper_args' : _wrapper_args,
@@ -396,17 +417,18 @@ class ParLoop(rt.ParLoop):
                                        'extr_loop_close' : _extr_loop_close}
 
         # We need to build with mpicc since that's required by PETSc
-        #print code_to_compile
+        print code_to_compile
         cc = os.environ.get('CC')
         os.environ['CC'] = 'mpicc'
         _fun = inline_with_numpy(code_to_compile, additional_declarations = kernel_code,
                                  additional_definitions = _const_decs + kernel_code,
-                                 include_dirs=[OP2_INC, get_petsc_dir()+'/include'],
+                                 include_dirs=[OP2_INC, get_petsc_dir()+'/include', '/usr/local/include/'],
                                  source_directory=os.path.dirname(os.path.abspath(__file__)),
                                  wrap_headers=["mat_utils.h"],
-                                 library_dirs=[OP2_LIB, get_petsc_dir()+'/lib'],
-                                 libraries=['op2_seq', 'petsc'],
-                                 sources=["mat_utils.cxx"])
+                                 library_dirs=[OP2_LIB, get_petsc_dir()+'/lib', '/usr/local/lib/'],
+                                 libraries=['op2_seq', 'petsc', 'likwid'],
+                                 sources=["mat_utils.cxx"],
+                                 cppargs=['-pthread'])
         if cc:
             os.environ['CC'] = cc
         else:

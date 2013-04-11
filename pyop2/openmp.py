@@ -87,7 +87,7 @@ class ParLoop(device.ParLoop):
 
 
 
-        part_size = 3000  #TODO: compute partition size
+        part_size = self._it_space.partsize  #TODO: compute partition size
 
         # Create a plan, for colored execution
         if [arg for arg in self.args if arg._is_indirect or arg._is_mat]:
@@ -515,12 +515,22 @@ class ParLoop(device.ParLoop):
               %(reduction_inits)s;
             }
             //printf("0\\n");
+
+            //printf("init marker\\n");
+            if (likwid_init == 0){
+                likwid_markerInit();
+            }
+            //printf("start region\\n");
+
+
             int boffset = 0;
             for ( int __col  = 0; __col < ncolors; __col++ ) {
               int nblocks = ncolblk[__col];
               //printf("Colour %(dd)s has %(dd)s partitions\\n", __col, nblocks);
               #pragma omp parallel shared(boffset, nblocks, blkmap, nelems, part_size)
               {
+                likwid_markerThreadInit();
+                likwid_markerStartRegion("accumulate");
                 %(vec_decs)s;
                 int tid = omp_get_thread_num();
                 %(interm_globals_decl)s;
@@ -541,6 +551,7 @@ class ParLoop(device.ParLoop):
                     %(zero_tmps)s;
                     %(kernel_name)s(%(kernel_args)s);
                     %(addtos_vector_field)s;
+                    //colours_vec[0][0] = __col;
                     %(apply_offset)s
                     %(extr_loop_close)s
                     %(itspace_loop_close)s
@@ -550,30 +561,41 @@ class ParLoop(device.ParLoop):
                     //    colours_vec[0][0] = bid;
                     //else
                     //    colours_vec[0][0] = 10;
-                    colours_vec[0][0] = __col;
+                    //colours_vec[0][0] = __col;
                   }
                   }
                 }
                 %(interm_globals_writeback)s;
                 //printf("Result: %(ff)s out of %(ff)s\\n", g_l[tid][0], g[0]);
                 //printf("2\\n");
+                likwid_markerStopRegion("accumulate");
               }
               %(reduction_finalisations)s
               boffset += nblocks;
               //printf("3\\n");
+
             }
             %(assembles)s;
             ;
+
+            if (likwid_init == 99){
+                likwid_markerClose();
+            }
+            likwid_init++;
           }"""
 
         if any(arg._is_soa for arg in args):
             kernel_code = """
+            #include <likwid.h>
             #define OP2_STRIDE(a, idx) a[idx]
+            static int likwid_init = 0;
             inline %(code)s
             #undef OP2_STRIDE
             """ % {'code' : self._kernel.code}
         else:
             kernel_code = """
+            #include <likwid.h>
+            static int likwid_init = 0;
             inline %(code)s
             """ % {'code' : self._kernel.code }
         code_to_compile =  wrapper % { 'kernel_name' : self._kernel.name,
@@ -616,15 +638,15 @@ class ParLoop(device.ParLoop):
         os.environ['CC'] = 'mpicc'
         _fun = inline_with_numpy(code_to_compile, additional_declarations = kernel_code,
                                  additional_definitions = _const_decs + kernel_code,
-                                 include_dirs=[OP2_INC, get_petsc_dir()+'/include'],
+                                 include_dirs=[OP2_INC, get_petsc_dir()+'/include','/usr/local/include/'],
                                  source_directory=os.path.dirname(os.path.abspath(__file__)),
                                  wrap_headers=["mat_utils.h"],
-                                 library_dirs=[OP2_LIB, get_petsc_dir()+'/lib'],
-                                 libraries=['op2_seq', 'petsc'],
+                                 library_dirs=[OP2_LIB, get_petsc_dir()+'/lib', '/usr/local/lib/'],
+                                 libraries=['op2_seq', 'petsc', 'likwid'],
                                  sources=["mat_utils.cxx"],
-                                 cppargs=['-fopenmp'],
+                                 cppargs=['-fopenmp', '-pthread'],
                                  system_headers=['omp.h'],
-                                 lddargs=['-fopenmp'])
+                                 lddargs=['-fopenmp', '-pthread'])
 
         if cc:
             os.environ['CC'] = cc

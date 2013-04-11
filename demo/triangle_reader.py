@@ -49,15 +49,21 @@ def read_triangle(f):
     """
     # Read nodes
     with open(f+'.node') as h:
-        num_nodes = int(h.readline().split(' ')[0])
+        firstline = h.readline().split(' ')
+        if len(firstline) > 5:
+            num_nodes = int(firstline[6])
+        else:
+            num_nodes = int(firstline[0])
         node_values = [0]*num_nodes
         for line in h:
             if line[0] == '#':
                 continue
             vals = line.strip('\n').split(' ')
             node = int(vals[0])-1
-            #print vals
-            x, y = [ float(x) for x in [vals[3], vals[5]] ]
+            if len(vals) > 3:
+                x, y = [ float(x) for x in [vals[3], vals[5]] ]
+            else:
+                x, y = [ float(x) for x in [vals[1], vals[2]] ]
             node_values[node] = (x,y)
 
     nodes = op2.Set(num_nodes,"nodes")

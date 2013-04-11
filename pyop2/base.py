@@ -199,6 +199,8 @@ class Set(object):
         self._name = name or "set_%d" % Set._globalcount
         self._layers = layers or 0
         self._lib_handle = None
+        self._partsize = None
+
         Set._globalcount += 1
 
     def __call__(self, *dims):
@@ -219,9 +221,18 @@ class Set(object):
         """User-defined label"""
         return self._layers
 
+    @property
+    def partsize(self):
+        """User-defined label"""
+        return self._partsize
+
     def setLayers(self,layers):
         """User-defined label"""
         self._layers = layers
+
+    def setPartitionSize(self,partsize):
+        """User-defined label"""
+        self._partsize = partsize
 
     def __str__(self):
         return "OP2 Set: %s with size %s" % (self._name, self._size)
@@ -240,6 +251,7 @@ class IterationSpace(object):
         self._iterset = iterset
         self._extents = as_tuple(extents, int)
         self._layers = iterset.layers
+        self._partsize = iterset.partsize
 
     @property
     def iterset(self):
@@ -264,6 +276,10 @@ class IterationSpace(object):
     @property
     def layers(self):
         return self._layers
+
+    @property
+    def partsize(self):
+        return self._partsize
 
     @property
     def _extent_ranges(self):
@@ -359,7 +375,8 @@ class Dat(DataCarrier):
     def __call__(self, path, access):
         if isinstance(path, Map):
             if path._dataset != self._dataset and path != IdentityMap:
-                raise MapValueError("Dataset of Map does not match Dataset of Dat.")
+                if path.off == None:
+                    raise MapValueError("Dataset of Map does not match Dataset of Dat.")
             return _make_object('Arg', data=self, map=path, access=access)
         else:
             path._dat = self
@@ -946,8 +963,9 @@ class ParLoop(object):
                     if arg._is_mat:
                         continue
                     if m._dataset != arg.data._dataset:
-                        raise MapValueError( \
-                            "Dataset of arg %s map %sdoesn't match the set of its Dat." % (i, j))
+                        if m.off == None:
+                            raise MapValueError( \
+                                "Dataset of arg %s map %sdoesn't match the set of its Dat." % (i, j))
 
     def generate_code(self):
         raise RuntimeError('Must select a backend')

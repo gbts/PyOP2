@@ -65,7 +65,6 @@ parser.add_argument('-p', '--partsize',
                     type=str,
                     required=False,
                     help='Base name of triangle mesh (excluding the .ele or .node extension)')
-
 opt = vars(parser.parse_args())
 op2.init(**opt)
 mesh_name = opt['mesh']
@@ -75,12 +74,13 @@ partition_size = int(opt['partsize'])
 # Generate code for kernel
 
 mass = op2.Kernel("""
-void comp_vol(double A[1], double *x[], int j)
+void comp_vol(double A[1], double *x[], double *y[], int j)
 {
+    if (y[0][0] != 3.0) printf(" %f \\n",y[0][0]);
     double abs = x[0][0]*(x[2][1]-x[4][1])+x[2][0]*(x[4][1]-x[0][1])+x[4][0]*(x[0][1]-x[2][1]);
     if (abs < 0)
       abs = abs * (-1.0);
-    A[0]+=0.5*abs*0.1;
+    A[0]+=0.5*abs*0.1 * 1.0;
 }""","comp_vol");
 
 #mass = op2.Kernel("""
@@ -117,7 +117,9 @@ mesh1d = np.array([2,1])
 A = np.array([[0,1],[0]])
 
 #the array of dof values for each element type
-dofs = np.array([[2,0],[0,0],[0,0]])
+dofs = np.array([[2,0],[0,0],[0,1]])
+dofs_coords = np.array([[2,0],[0,0],[0,0]])
+dofs_field = np.array([[0,0],[0,0],[0,1]])
 
 #ALL the nodes, edges amd cells of the 2D mesh
 nums = np.array([nodes.size,0,elements.size])
@@ -145,6 +147,8 @@ for d in range(0,2):
         map_dofs += 1
 #print "The size of the dofs map is = %d" % map_dofs
 
+map_dofs_coords = 6
+map_dofs_field = 1
 
 
 ### EXTRUSION DETAILS
@@ -162,7 +166,7 @@ mappp = mappp.reshape(-1,3)
 
 
 lins,cols = mappp.shape
-mapp=np.empty(shape=(lins,), dtype=object)
+mapp_coords =np.empty(shape=(lins,), dtype=object)
 
 t0ind= time.clock()
 ### DERIVE THE MAP FOR THE EDGES
@@ -172,9 +176,9 @@ for i in range(0, nums[0]):
 
 k = 0
 count = 0
-addNodes = dofs[0][0] != 0 or dofs[0][1] != 0
-addEdges = dofs[1][0] != 0 or dofs[1][1] != 0
-addCells = dofs[2][0] != 0 or dofs[2][1] != 0
+addNodes = True #dofs[0][0] != 0 or dofs[0][1] != 0
+addEdges = False#dofs[1][0] != 0 or dofs[1][1] != 0
+addCells = False#dofs[2][0] != 0 or dofs[2][1] != 0
 
 for i in range(0,lins): #for each cell to node mapping
   ns = mappp[i] - 1
@@ -193,15 +197,46 @@ for i in range(0,lins): #for each cell to node mapping
   if addCells:
     res = np.append(res, i) # add the map of the cell
   if addNodes:
-    mapp[i] = np.append(mappp[i], res)
+    mapp_coords[i] = np.append(mappp[i], res)
   else:
-    mapp[i] = res
+    mapp_coords[i] = res
+
+
+mapp_field =np.empty(shape=(lins,), dtype=object)
+k = 0
+count = 0
+addNodes = False#dofs[0][0] != 0 or dofs[0][1] != 0
+addEdges = False#dofs[1][0] != 0 or dofs[1][1] != 0
+addCells = True#dofs[2][0] != 0 or dofs[2][1] != 0
+
+for i in range(0,lins): #for each cell to node mapping
+  ns = mappp[i] - 1
+  ns.sort()
+  pairs = [(x,y) for x in ns for y in ns if x<y]
+  res = np.array([], dtype=np.int32)
+  if addEdges:
+    for x,y in pairs:
+      ys = [kk for yy,kk in edg[x] if yy == y]
+      if ys == []:
+        edg[x].append((y,k))
+        res = np.append(res,k)
+        k += 1
+      else:
+        res = np.append(res,ys[0])
+  if addCells:
+    res = np.append(res, i) # add the map of the cell
+  if addNodes:
+    mapp_field[i] = np.append(mappp[i], res)
+  else:
+    mapp_field[i] = res
 
 nums[1] = k #number of edges
 
 ### construct the initial indeces ONCE
 ### construct the offset array ONCE
 off = np.zeros(map_dofs, dtype = np.int32)
+off_coords = np.zeros(map_dofs_coords, dtype = np.int32)
+off_field = np.zeros(map_dofs_field, dtype = np.int32)
 ### THE OFFSET array
 #for 2D and 3D
 count = 0
@@ -213,6 +248,11 @@ for d in range(0,2): #for 2D and then for 3D
             off[count] = dofs[i][d]
             count+=1
 
+for i in range(0, map_dofs_coords):
+    off_coords[i] = off[i]
+for i in range(0, map_dofs_field):
+    off_field[i] = off[i + map_dofs_coords]
+
 #assemble the dat
 #compute total number of dofs in the 3D mesh
 no_dofs = np.dot(nums,dofs.transpose()[0])*layers + wedges * np.dot(dofs.transpose()[1],nums)
@@ -220,39 +260,66 @@ no_dofs = np.dot(nums,dofs.transpose()[0])*layers + wedges * np.dot(dofs.transpo
 ###
 #THE DAT
 ###
-dat_size = np.dot(sum(np.dot(nums.reshape(1,3),dofs)),np.array([layers,layers-1]))
-dat = np.zeros(dat_size)
+#dat_size = np.dot(sum(np.dot(nums.reshape(1,3),dofs)),np.array([layers,layers-1]))
+#dat = np.zeros(dat_size, dtype=np.float64)
 #dat_mp = np.array(dat_size)
-
 t0dat = time.clock()
+#count = 0
+#for d in range(0,2): #for 2D and then for 3D
+#  for i in range(0,len(mesh2d)): # over [3,3,1]
+#    if i == 0:
+#      for k in range(0, nums[i]):
+#        for k1 in range(0, layers-d):
+#          for l in range(0, dofs[i][d]):
+#            dat[count] = coords.data[k][l]
+#            count+=1
+#    else:
+#      for k in range(0, nums[i]):
+#        for k1 in range(0,layers-d):
+#          for l in range(0,dofs[i][d]):
+#            dat[count] = 3.0
+#            count+=1
+
+coords_size = nums[0] * layers * 2
+coords_dat = np.zeros(coords_size)
 count = 0
-for d in range(0,2): #for 2D and then for 3D
-  for i in range(0,len(mesh2d)): # over [3,3,1]
-      for k in range(0, nums[i]):
-        for k1 in range(0,layers-d):
-          for l in range(0,dofs[i][d]):
-                dat[count] = coords.data[k][l]
-                count+=1
+for k in range(0, nums[0]):
+  for k1 in range(0, layers):
+     for l in range(0, dofs[0][0]):
+        coords_dat[count] = coords.data[k][l]
+        count+=1
+
+field_size = nums[2] * wedges * 1
+field_dat = np.zeros(field_size)
+count = 0
+for k in range(0, nums[2]):
+  for k1 in range(0, wedges):
+     for l in range(0, dofs[2][1]):
+        field_dat[count] = 3.0
+        count+=1
 tdat = time.clock() - t0dat
 
 ### DECLARE OP2 STRUCTURES
 #create the set of dofs, they will be our'virtual' mesh entity
-dofsSet = op2.Set(no_dofs,"dofsSet")
+#----dofsSet = op2.Set(no_dofs,"dofsSet")
 
 #the dat has to be based on dofs not specific mesh elements
-coords = op2.Dat(dofsSet, 1, dat, np.float64, "coords")
-coords.setDatSize(dat_size)
-
-
+#----coords = op2.Dat(dofsSet, 1, dat, np.float64, "coords")
+#----coords.setDatSize(dat_size)
 #coords_mp = op2.Dat(dofsSet, 1, dat_mp, np.float64, "coords_mp")
 
+coords_dofsSet = op2.Set(nums[0] * layers * 2,"coords_dofsSet")
+coords = op2.Dat(coords_dofsSet, 1, coords_dat, np.float64, "coords")
 
-
+wedges_dofsSet = op2.Set(nums[2] * wedges,"wedges_dofsSet")
+field = op2.Dat(wedges_dofsSet,1,field_dat,np.float64,"field")
 
 ### THE MAP from the ind
 #create the map from element to dofs for each element in the 2D mesh
-lsize = nums[2]*map_dofs
-ind = compute_ind_extr(nums,map_dofs,lins,layers,mesh2d,dofs,A,wedges,mapp,lsize)
+lsize = nums[2]*map_dofs_coords
+ind_coords = compute_ind_extr(nums,map_dofs_coords,lins,layers,mesh2d,dofs_coords,A,wedges,mapp_coords,lsize)
+lsize = nums[2]*map_dofs_field
+ind_field = compute_ind_extr(nums,map_dofs_field,lins,layers,mesh2d,dofs_field,A,wedges,mapp_field,lsize)
 
 #SWAP ind entries for performance
 #k = 10 #depth
@@ -270,7 +337,7 @@ ind = compute_ind_extr(nums,map_dofs,lins,layers,mesh2d,dofs,A,wedges,mapp,lsize
 #ind = np.zeros(nums[2]*map_dofs, dtype=np.int32)
 #count = 0
 #for mm in range(0,lins):
-# print mapp[mm]
+#  #print mapp[mm]
 #  offset = 0
 #  for d in range(0,2):
 #    c = 0
@@ -292,7 +359,13 @@ ind = compute_ind_extr(nums,map_dofs,lins,layers,mesh2d,dofs,A,wedges,mapp,lsize
 #print "size of ind = %d" % ind.size
 #print "size of ind = %d" % ppp
 # Create the map from elements to dofs
-elem_dofs = op2.Map(elements,dofsSet,map_dofs,ind,"elem_dofs",off);
+
+#compose the maps that I want to have:
+#maps from 3D elems to nodes (for the coords)
+
+elem_dofs = op2.Map(elements,coords_dofsSet,map_dofs_coords,ind_coords,"elem_dofs",off_coords)
+
+elem_elem = op2.Map(elements,wedges_dofsSet,map_dofs_field,ind_field,"elem_elem",off_field)
 
 
 ### THE RESULT ARRAY
@@ -304,7 +377,6 @@ duration1 = time.clock() - t0ind
 # the elements set must also contain the layers
 elements.setLayers(layers)
 elements.setPartitionSize(partition_size)
-
 ##LOOP THAT COPIES THE DAT
 #op2.par_loop(data_comp, elements,
 #             coords_mp(elem_dofs, op2.INC),
@@ -322,7 +394,8 @@ t0loop2 = time.time()
 for i in range(0,100):
         op2.par_loop(mass, elements,
              g(op2.INC),
-             coords(elem_dofs, op2.READ)
+             coords(elem_dofs, op2.INC),
+             field(elem_elem, op2.INC)
             )
 tloop += time.clock() - t0loop # t is CPU seconds elapsed (floating point)
 tloop2 = time.time() - t0loop2
