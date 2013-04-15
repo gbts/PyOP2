@@ -357,7 +357,7 @@ class ParLoop(device.ParLoop):
               }
 
         def c_interm_globals_init(arg):
-            return "%(name)s_l1[0][0] = 0" % \
+            return "%(name)s_l1[0][0] = (double)0" % \
               {
                'name' : c_arg_name(arg)
               }
@@ -507,49 +507,67 @@ class ParLoop(device.ParLoop):
             int nthread = 1;
             #endif
 
-            %(reduction_decs)s;
+            //%(reduction_decs)s;
 
-            #pragma omp parallel default(shared)
+            double g_l[32][1024];
+
+            #pragma omp parallel // default(shared)
             {
               int tid = omp_get_thread_num();
-              %(reduction_inits)s;
+              //%(reduction_inits)s;
+              for(int i=0;i<1024;i++) g_l[tid][i]=0;
             }
-            //printf("0\\n");
 
-            //printf("init marker\\n");
             if (likwid_init == 0){
                 likwid_markerInit();
             }
-            //printf("start region\\n");
-
-
             int boffset = 0;
+            int __b,tid;
+            int lim;
+
             for ( int __col  = 0; __col < ncolors; __col++ ) {
               int nblocks = ncolblk[__col];
+
               //printf("Colour %(dd)s has %(dd)s partitions\\n", __col, nblocks);
-              #pragma omp parallel shared(boffset, nblocks, blkmap, nelems, part_size)
+              #pragma omp parallel private(__b,tid, lim) shared(boffset, nblocks, nelems, blkmap, part_size)
               {
                 likwid_markerThreadInit();
                 likwid_markerStartRegion("accumulate");
-                %(vec_decs)s;
-                int tid = omp_get_thread_num();
-                %(interm_globals_decl)s;
-                %(interm_globals_init)s;
+
+                tid = omp_get_thread_num();
+                //%(interm_globals_decl)s;
+                //%(interm_globals_init)s;
+                lim = boffset + nblocks;
+
+                double g_l1[32][1];
+
+                for(int i=0;i<1;i++) {
+                    g_l1[tid][i]=0;
+                }
 
                 #pragma omp for schedule(static)
-                for (int __b = boffset; __b < (boffset + nblocks); __b++ ) {
+                for (__b = boffset; __b < lim; __b++ )
                   {
+                  %(vec_decs)s;
                   int bid = blkmap[__b];
                   int nelem = nelems[bid];
                   int efirst = bid * part_size;
-                  //printf("1\\n");
+                  int lim2 = nelem + efirst;
                   //printf("Thread %(dd)s on cpu %(dd)s \\n", tid, sched_getcpu());
-                  for (int i = efirst; i < (efirst + nelem); i++ ) {
+
+                  for (int i = efirst; i < lim2; i++) {
+                    //printf("%(dd)s %(dd)s %(dd)s %(dd)s %(dd)s %(dd)s \\n",coords_map[i*6+0],coords_map[i*6+1], coords_map[i*6+2],coords_map[i*6+3],coords_map[i*6+4],coords_map[i*6+5]);
+
                     %(vec_inits)s;
                     %(itspace_loops)s
                     %(extr_loop)s
                     %(zero_tmps)s;
-                    %(kernel_name)s(%(kernel_args)s);
+                    //%(kernel_name)s(%(kernel_args)s);
+                    comp_vol(g_l1[tid], coords_vec, field_vec, j_0);
+
+
+
+
                     %(addtos_vector_field)s;
                     //colours_vec[0][0] = __col;
                     %(apply_offset)s
@@ -563,17 +581,18 @@ class ParLoop(device.ParLoop):
                     //    colours_vec[0][0] = 10;
                     //colours_vec[0][0] = __col;
                   }
-                  }
+
+                  //getchar();
+
+                  //%(interm_globals_writeback)s;
                 }
-                %(interm_globals_writeback)s;
+                //%(interm_globals_writeback)s;
+                g_l[tid][0] = g_l1[tid][0];
                 //printf("Result: %(ff)s out of %(ff)s\\n", g_l[tid][0], g[0]);
-                //printf("2\\n");
                 likwid_markerStopRegion("accumulate");
               }
               %(reduction_finalisations)s
               boffset += nblocks;
-              //printf("3\\n");
-
             }
             %(assembles)s;
             ;
@@ -587,6 +606,7 @@ class ParLoop(device.ParLoop):
         if any(arg._is_soa for arg in args):
             kernel_code = """
             #include <likwid.h>
+            #include <math.h>
             #define OP2_STRIDE(a, idx) a[idx]
             static int likwid_init = 0;
             inline %(code)s
@@ -595,6 +615,7 @@ class ParLoop(device.ParLoop):
         else:
             kernel_code = """
             #include <likwid.h>
+            #include <math.h>
             static int likwid_init = 0;
             inline %(code)s
             """ % {'code' : self._kernel.code }
@@ -633,6 +654,155 @@ class ParLoop(device.ParLoop):
                                        'ff' : _ff}
 
         # We need to build with mpicc since that's required by PETSc
+        code_to_compile="""
+        void wrap_comp_vol__(PyObject *_elements_size, PyObject *_g, PyObject *_coords, PyObject *_coords_map, PyObject *_field, PyObject *_field_map , PyObject* _part_size, PyObject* _ncolors, PyObject* _blkmap, PyObject* _ncolblk, PyObject* _nelems , PyObject *off1, PyObject *off2) {
+
+            int part_size = (int)PyInt_AsLong(_part_size);
+            int ncolors = (int)PyInt_AsLong(_ncolors);
+            int* blkmap = (int *)(((PyArrayObject *)_blkmap)->data);
+            int* ncolblk = (int *)(((PyArrayObject *)_ncolblk)->data);
+            int* nelems = (int *)(((PyArrayObject *)_nelems)->data);
+
+            int elements_size = (int)PyInt_AsLong(_elements_size);;
+            double *g = (double *)(((PyArrayObject *)_g)->data);
+            double *coords = (double *)(((PyArrayObject *)_coords)->data);
+            int *coords_map = (int *)(((PyArrayObject *)_coords_map)->data);
+            double *field = (double *)(((PyArrayObject *)_field)->data);
+            int *field_map = (int *)(((PyArrayObject *)_field_map)->data);
+            ;
+
+            ;
+            int * _off1 = (int *)(((PyArrayObject *)off1)->data);
+            int * _off2 = (int *)(((PyArrayObject *)off2)->data);
+
+            #ifdef _OPENMP
+            int nthread = omp_get_max_threads();
+            #else
+            int nthread = 1;
+            #endif
+
+            double g_l[32][1024];
+
+            #pragma omp parallel // default(shared)
+            {
+              int tid = omp_get_thread_num();
+              for(int i=0;i<1024;i++) g_l[tid][i]=0.0;
+            }
+
+            if (likwid_init == 0){
+                likwid_markerInit();
+            }
+            int boffset = 0;
+            int __b,tid;
+            int lim;
+
+            for ( int __col  = 0; __col < ncolors; __col++ ) {
+              int nblocks = ncolblk[__col];
+
+              //printf("Colour %d has %d partitions\\n", __col, nblocks);
+              #pragma omp parallel private(__b,tid, lim) shared(boffset, nblocks, nelems, blkmap, part_size)
+              {
+                likwid_markerThreadInit();
+                likwid_markerStartRegion("accumulate");
+
+                tid = omp_get_thread_num();
+                double g_l1[1][1];
+                g_l1[0][0] = (double)0;
+                lim = boffset + nblocks;
+
+                //double g_l1[32][1];
+
+                //for(int i=0;i<1;i++) {
+                //    g_l1[tid][i]=0;
+                //}
+
+                #pragma omp for schedule(static)
+                for (__b = boffset; __b < lim; __b++ )
+                  {
+                  ;
+                  //double c_vec[6][200];
+                  //double f_vec[1][100];
+                  double *coords_vec[6];
+                  double *field_vec[1];
+                  double vol;
+
+                  int bid = blkmap[__b];
+                  int nelem = nelems[bid];
+                  int efirst = bid * part_size;
+                  int lim2 = nelem + efirst;
+                  //printf("Thread %d on cpu %d \\n", tid, sched_getcpu());
+
+                  for (int i = efirst; i < lim2; i++) {
+                    //printf("%d %d %d %d %d %d \\n",coords_map[i*6+0],coords_map[i*6+1], coords_map[i*6+2],coords_map[i*6+3],coords_map[i*6+4],coords_map[i*6+5]);
+
+
+                    coords_vec[0] = coords + coords_map[i * 6 + 0] * 1;
+                    coords_vec[1] = coords + coords_map[i * 6 + 1] * 1;
+                    coords_vec[2] = coords + coords_map[i * 6 + 2] * 1;
+                    coords_vec[3] = coords + coords_map[i * 6 + 3] * 1;
+                    coords_vec[4] = coords + coords_map[i * 6 + 4] * 1;
+                    coords_vec[5] = coords + coords_map[i * 6 + 5] * 1;
+                    field_vec[0] = field + field_map[i * 1 + 0] * 1;
+
+                    //memcpy(coords + coords_map[i * 6 + 0], c_vec[0], 1600);
+                    //memcpy(coords + coords_map[i * 6 + 1], c_vec[1], 1600);
+                    //memcpy(coords + coords_map[i * 6 + 2], c_vec[2], 1600);
+                    //memcpy(coords + coords_map[i * 6 + 3], c_vec[3], 1600);
+                    //memcpy(coords + coords_map[i * 6 + 4], c_vec[4], 1600);
+                    //memcpy(coords + coords_map[i * 6 + 5], c_vec[5], 1600);
+                    //memcpy(field + field_map[i * 1 + 0],   f_vec[0], 800);
+
+                    //printf("",c_vec[0][0]);
+
+                    //coords_vec[0] = &c_vec[0][0];
+                    //coords_vec[1] = &c_vec[1][1];
+                    //coords_vec[2] = &c_vec[2][2];
+                    //coords_vec[3] = &c_vec[3][3];
+                    //coords_vec[4] = &c_vec[4][4];
+                    //coords_vec[5] = &c_vec[5][5];
+                    //field_vec[0] = &f_vec[0][0];
+
+                    for (int j_0=0; j_0<100; ++j_0){
+                        ;
+                        //comp_vol(g_l1[0], coords_vec, field_vec, j_0);
+                        //comp_vol(g_l1[0], coords_vec, field_vec, j_0);
+                   vol = coords_vec[0][0]*(coords_vec[2][1]-coords_vec[4][1])+coords_vec[2][0]*(coords_vec[4][1]-coords_vec[0][1])+coords_vec[4][0]*(coords_vec[0][1]-coords_vec[2][1]);
+
+                   //if (abs < 0)
+                   //     abs = abs * (-1.0);
+                   g_l1[0][0]+=0.5*abs(vol)*0.1 * field_vec[0][0];
+
+                        //for(int j=0; j<6;j++){
+                        //    coords_vec[j] += _off1[j];
+                        //}
+
+                        //for(int j=0; j<1;j++){
+                        //    field_vec[j] += _off2[j];
+                        //}
+                    }
+                  }
+                  //getchar();
+                  //g_l[tid][0] = g_l1[0][0];
+                }
+                g_l[tid][0] = g_l1[0][0];
+                //memcpy(g_l[tid], g_l1[tid], 8);
+                //printf("Result: %f out of %f\\n", g_l[tid][0], g[0]);
+                likwid_markerStopRegion("accumulate");
+              }
+
+              for ( int thread = 0; thread < nthread; thread++ ) {
+                for ( int i = 0; i < 1; i++ ) g[i] += g_l[thread][i];
+              }
+              boffset += nblocks;
+            }
+
+
+            if (likwid_init == 99){
+                likwid_markerClose();
+            }
+            likwid_init++;
+          }
+        """
         #print code_to_compile
         cc = os.environ.get('CC')
         os.environ['CC'] = 'mpicc'
@@ -644,7 +814,7 @@ class ParLoop(device.ParLoop):
                                  library_dirs=[OP2_LIB, get_petsc_dir()+'/lib', '/usr/local/lib/'],
                                  libraries=['op2_seq', 'petsc', 'likwid'],
                                  sources=["mat_utils.cxx"],
-                                 cppargs=['-fopenmp', '-pthread'],
+                                 cppargs=['-fopenmp', '-pthread', '-fprefetch-loop-arrays'],
                                  system_headers=['omp.h'],
                                  lddargs=['-fopenmp', '-pthread'])
 

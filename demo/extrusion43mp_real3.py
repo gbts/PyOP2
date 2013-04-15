@@ -76,11 +76,12 @@ partition_size = int(opt['partsize'])
 mass = op2.Kernel("""
 void comp_vol(double A[1], double *x[], double *y[], int j)
 {
-    if (y[0][0] != 3.0) printf(" %f \\n",y[0][0]);
+    //if (y[0][0] != 3.0) printf(" %f \\n",y[0][0]);
     double abs = x[0][0]*(x[2][1]-x[4][1])+x[2][0]*(x[4][1]-x[0][1])+x[4][0]*(x[0][1]-x[2][1]);
+    //printf(" %f \\n", abs);
     if (abs < 0)
       abs = abs * (-1.0);
-    A[0]+=0.5*abs*0.1 * 1.0;
+    A[0]+=0.5*abs*0.1 * y[0][0];
 }""","comp_vol");
 
 #mass = op2.Kernel("""
@@ -284,19 +285,23 @@ coords_size = nums[0] * layers * 2
 coords_dat = np.zeros(coords_size)
 count = 0
 for k in range(0, nums[0]):
-  for k1 in range(0, layers):
-     for l in range(0, dofs[0][0]):
-        coords_dat[count] = coords.data[k][l]
-        count+=1
+#  for k1 in range(0, layers):
+#     for l in range(0, dofs[0][0]):
+#        coords_dat[count] = coords.data[k][l]
+#        count+=1
+
+   coords_dat[count:count+layers*dofs[0][0]] = np.tile(coords.data[k,:],layers)
+   count += layers*dofs[0][0]
 
 field_size = nums[2] * wedges * 1
 field_dat = np.zeros(field_size)
-count = 0
-for k in range(0, nums[2]):
-  for k1 in range(0, wedges):
-     for l in range(0, dofs[2][1]):
-        field_dat[count] = 3.0
-        count+=1
+field_dat[:] = 3.0
+#count = 0
+#for k in range(0, nums[2]):
+#  for k1 in range(0, wedges):
+#     for l in range(0, dofs[2][1]):
+#        field_dat[count] = 3.0
+#        count+=1
 tdat = time.clock() - t0dat
 
 ### DECLARE OP2 STRUCTURES
@@ -394,8 +399,8 @@ t0loop2 = time.time()
 for i in range(0,100):
         op2.par_loop(mass, elements,
              g(op2.INC),
-             coords(elem_dofs, op2.INC),
-             field(elem_elem, op2.INC)
+             coords(elem_dofs, op2.READ),
+             field(elem_elem, op2.READ)
             )
 tloop += time.clock() - t0loop # t is CPU seconds elapsed (floating point)
 tloop2 = time.time() - t0loop2
