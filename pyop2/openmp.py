@@ -724,7 +724,6 @@ class ParLoop(device.ParLoop):
                   //double f_vec[1][100];
                   double *coords_vec[6];
                   double *field_vec[1];
-                  double vol;
 
                   int bid = blkmap[__b];
                   int nelem = nelems[bid];
@@ -765,20 +764,16 @@ class ParLoop(device.ParLoop):
                     for (int j_0=0; j_0<100; ++j_0){
                         ;
                         //comp_vol(g_l1[0], coords_vec, field_vec, j_0);
-                        //comp_vol(g_l1[0], coords_vec, field_vec, j_0);
-                   vol = coords_vec[0][0]*(coords_vec[2][1]-coords_vec[4][1])+coords_vec[2][0]*(coords_vec[4][1]-coords_vec[0][1])+coords_vec[4][0]*(coords_vec[0][1]-coords_vec[2][1]);
+                        comp_vol(g_l1[0], coords_vec, field_vec, j_0);
 
-                   //if (abs < 0)
-                   //     abs = abs * (-1.0);
-                   g_l1[0][0]+=0.5*abs(vol)*0.1 * field_vec[0][0];
 
-                        //for(int j=0; j<6;j++){
-                        //    coords_vec[j] += _off1[j];
-                        //}
+                        for(int j=0; j<6;j++){
+                            coords_vec[j] += _off1[j];
+                        }
 
-                        //for(int j=0; j<1;j++){
-                        //    field_vec[j] += _off2[j];
-                        //}
+                        for(int j=0; j<1;j++){
+                            field_vec[j] += _off2[j];
+                        }
                     }
                   }
                   //getchar();
