@@ -138,53 +138,67 @@ void wrap_%(kernel_name)s__(PyObject *_end, %(wrapper_args)s %(const_args)s,
   int* ncolblk = (int *)(((PyArrayObject *)_ncolblk)->data);
   int* nelems = (int *)(((PyArrayObject *)_nelems)->data);
 
-  %(wrapper_decs)s;
-  %(const_inits)s;
-  %(local_tensor_decs)s;
+                %(set_size_dec)s;
+                %(wrapper_decs)s;
+                %(const_inits)s;
+                %(local_tensor_decs)s;
+                %(off_inits)s;
 
-  #ifdef _OPENMP
-  int nthread = omp_get_max_threads();
-  #else
-  int nthread = 1;
-  #endif
+                #ifdef _OPENMP
+                int nthread = omp_get_max_threads();
+                #else
+                int nthread = 1;
+                #endif
 
-  %(reduction_decs)s;
+                %(reduction_decs)s;
 
-  #pragma omp parallel default(shared)
-  {
-    int tid = omp_get_thread_num();
-    %(reduction_inits)s;
-  }
+                #pragma omp parallel default(shared)
+                {
+                  int tid = omp_get_thread_num();
+                  %(reduction_inits)s;
+                }
 
-  int boffset = 0;
-  for ( int __col  = 0; __col < ncolors; __col++ ) {
-    int nblocks = ncolblk[__col];
+                int boffset = 0;
+                int __b,tid;
+                int lim;
+                for ( int __col  = 0; __col < ncolors; __col++ ) {
+                  int nblocks = ncolblk[__col];
 
-    #pragma omp parallel default(shared)
-    {
-      int tid = omp_get_thread_num();
+                  #pragma omp parallel private(__b,tid, lim) shared(boffset, nblocks, nelems, blkmap, part_size)
+                  {
+                    int tid = omp_get_thread_num();
+                    tid = omp_get_thread_num();
+                    %(interm_globals_decl)s;
+                    %(interm_globals_init)s;
+                    lim = boffset + nblocks;
 
-      #pragma omp for schedule(static)
-      for ( int __b = boffset; __b < (boffset + nblocks); __b++ ) {
-        int bid = blkmap[__b];
-        int nelem = nelems[bid];
-        int efirst = bid * part_size;
-        for (int i = efirst; i < (efirst + nelem); i++ ) {
-          %(vec_inits)s;
-          %(itspace_loops)s
-          %(zero_tmps)s;
-          %(kernel_name)s(%(kernel_args)s);
-          %(addtos_vector_field)s;
-          %(itspace_loop_close)s
-          %(addtos_scalar_field)s;
-        }
-      }
-    }
-    %(reduction_finalisations)s
-    boffset += nblocks;
-  }
-}
-"""
+                    #pragma omp for schedule(static)
+                    for ( int __b = boffset; __b < lim; __b++ ) {
+                      %(vec_decs)s;
+                      int bid = blkmap[__b];
+                      int nelem = nelems[bid];
+                      int efirst = bid * part_size;
+                      int lim2 = nelem + efirst;
+                      for (int i = efirst; i < lim2; i++ ) {
+                        %(vec_inits)s;
+                        %(itspace_loops)s
+                        %(extr_loop)s
+                        %(zero_tmps)s;
+                        %(kernel_name)s(%(kernel_args)s);
+                        %(addtos_vector_field)s;
+                        %(apply_offset)s
+                        %(extr_loop_close)s
+                        %(itspace_loop_close)s
+                        %(addtos_scalar_field)s;
+                      }
+                    }
+                    %(interm_globals_writeback)s;
+                  }
+                  %(reduction_finalisations)s
+                  boffset += nblocks;
+                }
+              }
+              """
 
     def generate_code(self):
 
@@ -222,7 +236,7 @@ class ParLoop(device.ParLoop, host.ParLoop):
         for c in Const._definitions():
             _args.append(c.data)
 
-        part_size = 1024  #TODO: compute partition size
+        part_size = self._it_space.partsize
 
         # Create a plan, for colored execution
         if [arg for arg in self.args if arg._is_indirect or arg._is_mat]:
@@ -254,11 +268,40 @@ class ParLoop(device.ParLoop, host.ParLoop):
         _args.append(plan.ncolblk)
         _args.append(plan.nelems)
 
+        for arg in self.args:
+            if  self._it_space.layers > 1:
+              if arg._is_indirect or arg._is_mat:
+                maps = as_tuple(arg.map, Map)
+                for map in maps:
+                   if map.off != None:
+                       _args.append(map.off)
+
         fun(*_args)
 
         for arg in self.args:
             if arg._is_mat:
                 arg.data._assemble()
+
+    def generate_code(self):
+
+        # Most of the code to generate is the same as that for sequential
+        code_dict = super(ParLoop, self).generate_code()
+
+        _set_size_wrapper = 'PyObject *_%(set)s_size' % {'set' : self._it_space.name}
+        _set_size_dec = 'int %(set)s_size = (int)PyInt_AsLong(_%(set)s_size);' % {'set' : self._it_space.name}
+        _set_size = '%(set)s_size' % {'set' : self._it_space.name}
+
+        _reduction_decs = ';\n'.join([arg.c_reduction_dec() for arg in self.args if arg._is_global_reduction])
+        _reduction_inits = ';\n'.join([arg.c_reduction_init() for arg in self.args if arg._is_global_reduction])
+        _reduction_finalisations = '\n'.join([arg.c_reduction_finalisation() for arg in self.args if arg._is_global_reduction])
+
+        code_dict.update({'set_size' : _set_size,
+                          'set_size_dec' : _set_size_dec,
+                          'set_size_wrapper' : _set_size_wrapper,
+                          'reduction_decs' : _reduction_decs,
+                          'reduction_inits' : _reduction_inits,
+                          'reduction_finalisations' : _reduction_finalisations})
+        return code_dict
 
     @property
     def _requires_matrix_coloring(self):
