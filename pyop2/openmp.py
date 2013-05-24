@@ -281,8 +281,6 @@ class ParLoop(device.ParLoop, host.ParLoop):
             if arg._is_mat:
                 arg.data._assemble()
 
-
-
     @property
     def _requires_matrix_coloring(self):
         """Direct code generation to follow colored execution for global matrix insertion."""
