@@ -85,7 +85,7 @@ class Arg(host.Arg):
         return "%(type)s %(name)s_l[%(max_threads)s][%(dim)s]" % \
           {'type' : self.ctype,
            'name' : self.c_arg_name(),
-           'dim' : self.data.cdim,
+           'dim' : self.data.cdim*8,
            # Ensure different threads are on different cache lines
            'max_threads' : _max_threads}
 
@@ -95,7 +95,7 @@ class Arg(host.Arg):
         else:
             init = "%(name)s[i]" % {'name' : self.c_arg_name()}
         return "for ( int i = 0; i < %(dim)s; i++ ) %(name)s_l[tid][i] = %(init)s" % \
-          {'dim' : self.data.cdim,
+          {'dim' : self.data.cdim*8,
            'name' : self.c_arg_name(),
            'init' : init}
 
@@ -130,7 +130,7 @@ class JITModule(host.JITModule):
     wrapper = """
 void wrap_%(kernel_name)s__(PyObject *_end, %(wrapper_args)s %(const_args)s,
                             PyObject* _part_size, PyObject* _ncolors, PyObject* _blkmap,
-                            PyObject* _ncolblk, PyObject* _nelems) {
+                            PyObject* _ncolblk, PyObject* _nelems  %(off_args)s) {
   int end = (int)PyInt_AsLong(_end);
   int part_size = (int)PyInt_AsLong(_part_size);
   int ncolors = (int)PyInt_AsLong(_ncolors);
@@ -138,7 +138,6 @@ void wrap_%(kernel_name)s__(PyObject *_end, %(wrapper_args)s %(const_args)s,
   int* ncolblk = (int *)(((PyArrayObject *)_ncolblk)->data);
   int* nelems = (int *)(((PyArrayObject *)_nelems)->data);
 
-                %(set_size_dec)s;
                 %(wrapper_decs)s;
                 %(const_inits)s;
                 %(local_tensor_decs)s;
@@ -217,7 +216,7 @@ void wrap_%(kernel_name)s__(PyObject *_end, %(wrapper_args)s %(const_args)s,
 class ParLoop(device.ParLoop, host.ParLoop):
 
     def compute(self):
-        fun = JITModule(self.kernel, self.it_space.extents, *self.args)
+        fun = JITModule(self.kernel, self.it_space, *self.args)
         _args = [self._it_space.size]
         for arg in self.args:
             if arg._is_mat:
@@ -282,26 +281,7 @@ class ParLoop(device.ParLoop, host.ParLoop):
             if arg._is_mat:
                 arg.data._assemble()
 
-    def generate_code(self):
 
-        # Most of the code to generate is the same as that for sequential
-        code_dict = super(ParLoop, self).generate_code()
-
-        _set_size_wrapper = 'PyObject *_%(set)s_size' % {'set' : self._it_space.name}
-        _set_size_dec = 'int %(set)s_size = (int)PyInt_AsLong(_%(set)s_size);' % {'set' : self._it_space.name}
-        _set_size = '%(set)s_size' % {'set' : self._it_space.name}
-
-        _reduction_decs = ';\n'.join([arg.c_reduction_dec() for arg in self.args if arg._is_global_reduction])
-        _reduction_inits = ';\n'.join([arg.c_reduction_init() for arg in self.args if arg._is_global_reduction])
-        _reduction_finalisations = '\n'.join([arg.c_reduction_finalisation() for arg in self.args if arg._is_global_reduction])
-
-        code_dict.update({'set_size' : _set_size,
-                          'set_size_dec' : _set_size_dec,
-                          'set_size_wrapper' : _set_size_wrapper,
-                          'reduction_decs' : _reduction_decs,
-                          'reduction_inits' : _reduction_inits,
-                          'reduction_finalisations' : _reduction_finalisations})
-        return code_dict
 
     @property
     def _requires_matrix_coloring(self):
