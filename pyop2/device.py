@@ -308,6 +308,7 @@ nblocks: %(nblocks)d
 nelems: %(nelems)s
 offset: %(offset)s
 ncolors / core / owned: %(ncolors)d / %(ncolors_core)d / %(ncolors_owned)d
+pcolors: %(pcolors)s
 blkmap: %(blkmap)s
 ncolblk: %(ncolblk)s
 """ %{
@@ -318,6 +319,7 @@ ncolblk: %(ncolblk)s
         'ncolors' : self.ncolors,
         'ncolors_core' : self.ncolors_core,
         'ncolors_owned' : self.ncolors_owned,
+        'pcolors' : getattr(self, '_pcolors', []),
         'blkmap' : self.blkmap,
         'ncolblk' : self.ncolblk}
 
