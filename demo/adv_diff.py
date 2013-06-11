@@ -107,11 +107,13 @@ def main(opt):
         op2.par_loop(adv, elements(3, 3),
                      adv_mat((elem_node[op2.i[0]], elem_node[op2.i[1]]), op2.INC),
                      coords(elem_vnode, op2.READ))
+        adv_mat.dump('adv_mat.%s.%s.dump' % (opt['backend'], os.path.split(opt['mesh'])[-1]))
     if opt['diffusion']:
         diff_mat = op2.Mat(sparsity, valuetype, "diff_mat")
         op2.par_loop(diff, elements(3, 3),
                      diff_mat((elem_node[op2.i[0]], elem_node[op2.i[1]]), op2.INC),
                      coords(elem_vnode, op2.READ))
+        diff_mat.dump('diff_mat.%s.%s.dump' % (opt['backend'], os.path.split(opt['mesh'])[-1]))
 
     tracer_vals = np.zeros(num_nodes, dtype=valuetype)
     tracer = op2.Dat(nodes, tracer_vals, valuetype, "tracer")

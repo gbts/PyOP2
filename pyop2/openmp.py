@@ -148,6 +148,7 @@ void wrap_%(kernel_name)s__(
 
   #ifdef _OPENMP
   int nthread = omp_get_max_threads();
+  printf("nthread: %%d\\n", nthread);
   #else
   int nthread = 1;
   #endif
@@ -217,7 +218,7 @@ class ParLoop(device.ParLoop, host.ParLoop):
             _args.append(c.data)
 
         #TODO: compute partition size
-        plan = self._get_plan(1024)
+        plan = self._get_plan(2)
         _args.append(plan.blkmap)
         _args.append(plan.offset)
         _args.append(plan.nelems)
@@ -225,6 +226,7 @@ class ParLoop(device.ParLoop, host.ParLoop):
         self.halo_exchange_begin()
 
         boffset = 0
+        info(plan)
         for c in range(plan.ncolors):
             if c == plan.ncolors_core:
                 self.halo_exchange_end()
