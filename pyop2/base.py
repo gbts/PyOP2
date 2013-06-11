@@ -321,7 +321,7 @@ class Set(object):
         self._lib_handle = None
         self._halo = halo
         self._layers = 0
-        self._partsize = None
+        self._partsize = 1000
         self._seq = None
         if self.halo:
             self.halo.verify(self)
