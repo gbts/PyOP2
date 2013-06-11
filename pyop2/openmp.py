@@ -269,6 +269,7 @@ class ParLoop(device.ParLoop, host.ParLoop):
 
                 def __init__(self, iset, part_size):
                     self.nblocks = int(math.ceil(iset.size / float(part_size)))
+                    self.pcolors = []
                     self.ncolors = 1
                     self.ncolors_core = 1
                     self.ncolors_owned = 1

@@ -486,6 +486,10 @@ MPI only."""
         return self._handle().ncolors
 
     @property
+    def pcolors(self):
+        return []
+
+    @property
     def ncolblk(self):
         """Number of blocks for each colour
 

@@ -398,6 +398,7 @@ cdef class Plan:
             free(flat_race_args[i].mip)
         free(flat_race_args)
 
+        self._pcolors = pcolors
         self._ncolors = max(pcolors) + 1
         self._ncolblk = numpy.bincount(pcolors).astype(numpy.int32)
         self._blkmap = numpy.argsort(pcolors, kind='mergesort').astype(numpy.int32)
@@ -479,6 +480,10 @@ cdef class Plan:
     @property
     def ncolors(self):
         return self._ncolors
+
+    @property
+    def pcolors(self):
+        return self._pcolors
 
     #dummy values for now, to make it run with the cuda backend
     @property
