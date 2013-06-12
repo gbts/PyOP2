@@ -71,12 +71,6 @@ mesh_name = opt['mesh']
 layers = int(opt['layers'])
 partition_size = int(opt['partsize'])
 
-sequential = True
-try:
-    sequential=(opt["backend"] == "sequential")
-except KeyError:
-    pass
-
 # Generate code for kernel
 
 mass = op2.Kernel("""
@@ -95,16 +89,6 @@ void comp_vol(double A[1], double *x[], double *y[], double *z[], int j)
     z[4][0]+=0.2*(0.5*abs*0.1*y[0][0]); //0.166*(0.5*abs*0.1*y[0][0]);
     z[5][0]+=0.2*(0.5*abs*0.1*y[0][0]); //0.166*(0.5*abs*0.1*y[0][0]);
 }""","comp_vol");
-
-#mass = op2.Kernel("""
-#void comp_vol(double A[1], double *x, int j)
-#{
-#    double abs = x[0]*(x[5]-x[9])+x[4]*(x[9]-x[1])+x[8]*(x[1]-x[5]);
-#    if (abs < 0)
-#      abs = abs * (-1.0);
-#    A[0]+=0.5*abs*0.1;
-#}""","comp_vol");
-
 
 data_comp = op2.Kernel("""
 void comp_dat(double *x[], double *y[], int j)
@@ -143,14 +127,8 @@ dofss = dofs.transpose().ravel()
 
 #number of dofs
 noDofs = 0 #number of dofs
-
 noDofs = np.dot(mesh2d,dofs)
-#print "number of dofs per 2D element = %d" % noDofs[0]
-
 noDofs = len(A[0])*noDofs[0] + noDofs[1]
-#print "total number of dofs = %d" % noDofs
-
-
 
 ### Number of elements in the map only counts the first reference to the dofs related to a mesh element
 map_dofs = 0
@@ -360,12 +338,7 @@ duration1 = time.clock() - t0ind
 # the elements set must also contain the layers
 elements.setLayers(layers)
 elements.setPartitionSize(partition_size)
-elements.setSequential(sequential)
-##LOOP THAT COPIES THE DAT
-#op2.par_loop(data_comp, elements,
-#             coords_mp(elem_dofs, op2.INC),
-#             coords(elem_dofs, op2.READ)
-#            )
+
 
 
 #t0loop= time.clock()

@@ -71,12 +71,6 @@ mesh_name = opt['mesh']
 layers = int(opt['layers'])
 partition_size = int(opt['partsize'])
 
-sequential = True
-try:
-    sequential=(opt["backend"] == "sequential")
-except KeyError:
-    pass
-
 # Generate code for kernel
 
 mass = op2.Kernel("""
@@ -88,16 +82,6 @@ void comp_vol(double A[1], double *x[], double *y[], int j)
     A[0]+=0.5*abs*0.1 * y[0][0];
 }""","comp_vol");
 
-#mass = op2.Kernel("""
-#void comp_vol(double A[1], double *x, int j)
-#{
-#    double abs = x[0]*(x[5]-x[9])+x[4]*(x[9]-x[1])+x[8]*(x[1]-x[5]);
-#    if (abs < 0)
-#      abs = abs * (-1.0);
-#    A[0]+=0.5*abs*0.1;
-#}""","comp_vol");
-
-
 data_comp = op2.Kernel("""
 void comp_dat(double *x[], double *y[], int j)
 {
@@ -107,8 +91,6 @@ void comp_dat(double *x[], double *y[], int j)
         }
     }
     }""","comp_dat");
-
-
 
 # Set up simulation data structures
 
@@ -134,14 +116,8 @@ dofss = dofs.transpose().ravel()
 
 #number of dofs
 noDofs = 0 #number of dofs
-
 noDofs = np.dot(mesh2d,dofs)
-#print "number of dofs per 2D element = %d" % noDofs[0]
-
 noDofs = len(A[0])*noDofs[0] + noDofs[1]
-#print "total number of dofs = %d" % noDofs
-
-
 
 ### Number of elements in the map only counts the first reference to the dofs related to a mesh element
 map_dofs = 0
@@ -155,7 +131,6 @@ for d in range(0,2):
 map_dofs_coords = 6
 map_dofs_field = 1
 
-
 ### EXTRUSION DETAILS
 wedges = layers - 1
 
@@ -168,7 +143,6 @@ wedges = layers - 1
 
 mappp = elem_node.values
 mappp = mappp.reshape(-1,3)
-
 
 lins,cols = mappp.shape
 mapp_coords =np.empty(shape=(lins,), dtype=object)
@@ -282,7 +256,6 @@ tdat = time.clock() - t0dat
 
 ### DECLARE OP2 STRUCTURES
 #create the set of dofs, they will be our'virtual' mesh entity
-
 coords_dofsSet = op2.Set(nums[0] * layers * 2, 1,"coords_dofsSet")
 coords = op2.Dat(coords_dofsSet, coords_dat, np.float64, "coords")
 
@@ -298,11 +271,8 @@ ind_field = compute_ind_extr(nums,map_dofs_field,lins,layers,mesh2d,dofs_field,A
 
 #compose the maps that I want to have:
 #maps from 3D elems to nodes (for the coords)
-
 elem_dofs = op2.Map(elements,coords_dofsSet,map_dofs_coords,ind_coords,"elem_dofs",off_coords)
-
 elem_elem = op2.Map(elements,wedges_dofsSet,map_dofs_field,ind_field,"elem_elem",off_field)
-
 
 ### THE RESULT ARRAY
 g = op2.Global(1, data=0.0, name='g')
@@ -313,12 +283,10 @@ duration1 = time.clock() - t0ind
 # the elements set must also contain the layers
 elements.setLayers(layers)
 elements.setPartitionSize(partition_size)
-elements.setSequential(sequential)
 
 ### CALL PAR LOOP
 # Compute volume
 tloop = 0
-#for j in range(0,10):
 t0loop= time.clock()
 t0loop2 = time.time()
 for i in range(0,100):

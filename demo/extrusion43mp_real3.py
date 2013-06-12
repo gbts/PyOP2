@@ -71,12 +71,6 @@ mesh_name = opt['mesh']
 layers = int(opt['layers'])
 partition_size = int(opt['partsize'])
 
-sequential = True
-try:
-    sequential=(opt["backend"] == "sequential")
-except KeyError:
-    pass
-
 # Generate code for kernel
 
 mass = op2.Kernel("""
@@ -88,16 +82,6 @@ void comp_vol(double A[1], double *x[], double *y[], int j)
     A[0]+=0.5*abs*0.1 * y[0][0];
 }""","comp_vol");
 
-#mass = op2.Kernel("""
-#void comp_vol(double A[1], double *x, int j)
-#{
-#    double abs = x[0]*(x[5]-x[9])+x[4]*(x[9]-x[1])+x[8]*(x[1]-x[5]);
-#    if (abs < 0)
-#      abs = abs * (-1.0);
-#    A[0]+=0.5*abs*0.1;
-#}""","comp_vol");
-
-
 data_comp = op2.Kernel("""
 void comp_dat(double *x[], double *y[], int j)
 {
@@ -107,8 +91,6 @@ void comp_dat(double *x[], double *y[], int j)
         }
     }
     }""","comp_dat");
-
-
 
 # Set up simulation data structures
 
@@ -134,14 +116,8 @@ dofss = dofs.transpose().ravel()
 
 #number of dofs
 noDofs = 0 #number of dofs
-
 noDofs = np.dot(mesh2d,dofs)
-#print "number of dofs per 2D element = %d" % noDofs[0]
-
 noDofs = len(A[0])*noDofs[0] + noDofs[1]
-#print "total number of dofs = %d" % noDofs
-
-
 
 ### Number of elements in the map only counts the first reference to the dofs related to a mesh element
 map_dofs = 0
@@ -155,7 +131,6 @@ for d in range(0,2):
 map_dofs_coords = 6
 map_dofs_field = 1
 
-
 ### EXTRUSION DETAILS
 wedges = layers - 1
 
@@ -168,7 +143,6 @@ wedges = layers - 1
 
 mappp = elem_node.values
 mappp = mappp.reshape(-1,3)
-
 
 lins,cols = mappp.shape
 mapp_coords =np.empty(shape=(lins,), dtype=object)
@@ -265,58 +239,23 @@ no_dofs = np.dot(nums,dofs.transpose()[0])*layers + wedges * np.dot(dofs.transpo
 ###
 #THE DAT
 ###
-#dat_size = np.dot(sum(np.dot(nums.reshape(1,3),dofs)),np.array([layers,layers-1]))
-#dat = np.zeros(dat_size, dtype=np.float64)
-#dat_mp = np.array(dat_size)
 t0dat = time.clock()
-#count = 0
-#for d in range(0,2): #for 2D and then for 3D
-#  for i in range(0,len(mesh2d)): # over [3,3,1]
-#    if i == 0:
-#      for k in range(0, nums[i]):
-#        for k1 in range(0, layers-d):
-#          for l in range(0, dofs[i][d]):
-#            dat[count] = coords.data[k][l]
-#            count+=1
-#    else:
-#      for k in range(0, nums[i]):
-#        for k1 in range(0,layers-d):
-#          for l in range(0,dofs[i][d]):
-#            dat[count] = 3.0
-#            count+=1
 
 coords_size = nums[0] * layers * 2
 coords_dat = np.zeros(coords_size)
 count = 0
 for k in range(0, nums[0]):
-#  for k1 in range(0, layers):
-#     for l in range(0, dofs[0][0]):
-#        coords_dat[count] = coords.data[k][l]
-#        count+=1
-
    coords_dat[count:count+layers*dofs[0][0]] = np.tile(coords.data[k,:],layers)
    count += layers*dofs[0][0]
 
 field_size = nums[2] * wedges * 1
 field_dat = np.zeros(field_size)
 field_dat[:] = 3.0
-#count = 0
-#for k in range(0, nums[2]):
-#  for k1 in range(0, wedges):
-#     for l in range(0, dofs[2][1]):
-#        field_dat[count] = 3.0
-#        count+=1
 tdat = time.clock() - t0dat
 
 ### DECLARE OP2 STRUCTURES
 #create the set of dofs, they will be our'virtual' mesh entity
-#----dofsSet = op2.Set(no_dofs,"dofsSet")
-
 #the dat has to be based on dofs not specific mesh elements
-#----coords = op2.Dat(dofsSet, 1, dat, np.float64, "coords")
-#----coords.setDatSize(dat_size)
-#coords_mp = op2.Dat(dofsSet, 1, dat_mp, np.float64, "coords_mp")
-
 coords_dofsSet = op2.Set(nums[0] * layers * 2, 1,"coords_dofsSet")
 coords = op2.Dat(coords_dofsSet, coords_dat, np.float64, "coords")
 
@@ -344,19 +283,10 @@ duration1 = time.clock() - t0ind
 # the elements set must also contain the layers
 elements.setLayers(layers)
 elements.setPartitionSize(partition_size)
-elements.setSequential(sequential)
-##LOOP THAT COPIES THE DAT
-#op2.par_loop(data_comp, elements,
-#             coords_mp(elem_dofs, op2.INC),
-#             coords(elem_dofs, op2.READ)
-#            )
 
-
-#t0loop= time.clock()
 ### CALL PAR LOOP
 # Compute volume
 tloop = 0
-#for j in range(0,10):
 t0loop= time.clock()
 t0loop2 = time.time()
 for i in range(0,100):
@@ -370,5 +300,3 @@ tloop2 = time.time() - t0loop2
 
 ttloop = tloop / 10
 print nums[0], nums[1], nums[2], layers, duration1, tloop, tloop2, g.data
-
-#print g.data
