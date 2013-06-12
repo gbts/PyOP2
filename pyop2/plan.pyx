@@ -363,12 +363,12 @@ cdef class Plan:
                         if _p == _first_block_owned:
                             self._ncolors_core = pcolors.max() + 1
                             #self._ncolors_core = max(1, pcolors.max() + 1)
-                            base_color = self._ncolors_core
+                            _base_color = self._ncolors_core
 
                         if _p == _first_block_halo:
                             self._ncolors_owned = pcolors.max() + 1
                             #self._ncolors_owned = max(self._ncolors_core + 1, pcolors.max() + 1)
-                            base_color = self._ncolors_owned
+                            _base_color = self._ncolors_owned
 
                     _mask = 0
                     for _t in range(offset[_p], offset[_p] + nelems[_p]):
