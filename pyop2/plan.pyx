@@ -364,11 +364,20 @@ cdef class Plan:
                             self._ncolors_core = pcolors.max() + 1
                             #self._ncolors_core = max(1, pcolors.max() + 1)
                             _base_color = self._ncolors_core
+                            # zero out working array (clear deps between core/owned/halo):
+                            for _rai in range(n_race_args):
+                                for _i in range(flat_race_args[_rai].size):
+                                    flat_race_args[_rai].tmp[_i] = 0
+
 
                         if _p == _first_block_halo:
                             self._ncolors_owned = pcolors.max() + 1
                             #self._ncolors_owned = max(self._ncolors_core + 1, pcolors.max() + 1)
                             _base_color = self._ncolors_owned
+                            # zero out working array (clear deps between core/owned/halo):
+                            for _rai in range(n_race_args):
+                                for _i in range(flat_race_args[_rai].size):
+                                    flat_race_args[_rai].tmp[_i] = 0
 
                     _mask = 0
                     for _t in range(offset[_p], offset[_p] + nelems[_p]):
