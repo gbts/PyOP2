@@ -59,6 +59,7 @@ from ufl import *
 
 def main(opt):
     # Set up finite element problem
+    print opt['backend']
 
     dt = 0.0001
 
@@ -108,20 +109,20 @@ def main(opt):
     op2.info('sparsity.onnz:', sparsity.onnz)
     #with open('sparsity.%s.%d.npz' % (opt['backend'], op2.MPI.comm.rank), 'wb') as f:
         #np.savez(f, sparsity.nz, sparsity.rowptr, sparsity.colidx)
-    #if opt['advection']:
-        #adv_mat = op2.Mat(sparsity, valuetype, "adv_mat")
-        #op2.par_loop(adv, elements(3, 3),
-                     #adv_mat((elem_node[op2.i[0]], elem_node[op2.i[1]]), op2.INC),
-                     #coords(elem_vnode, op2.READ))
-        #adv_mat.dump('adv_mat.%s.%s.dump' % (opt['backend'], os.path.split(opt['mesh'])[-1]))
-        #op2.info('adv_mat:', adv_mat.handle.sizes)
-    #if opt['diffusion']:
-        #diff_mat = op2.Mat(sparsity, valuetype, "diff_mat")
-        #op2.par_loop(diff, elements(3, 3),
-                     #diff_mat((elem_node[op2.i[0]], elem_node[op2.i[1]]), op2.INC),
-                     #coords(elem_vnode, op2.READ))
-        #diff_mat.dump('diff_mat.%s.%s.dump' % (opt['backend'], os.path.split(opt['mesh'])[-1]))
-        #op2.info('diff_mat:', adv_mat.handle.sizes)
+    if opt['advection']:
+        adv_mat = op2.Mat(sparsity, valuetype, "adv_mat")
+        op2.par_loop(adv, elements(3, 3),
+                     adv_mat((elem_node[op2.i[0]], elem_node[op2.i[1]]), op2.INC),
+                     coords(elem_vnode, op2.READ))
+        adv_mat.dump('adv_mat.%s.%s.dump' % (opt['backend'], os.path.split(opt['mesh'])[-1]))
+        op2.info('adv_mat:', adv_mat.handle.sizes)
+    if opt['diffusion']:
+        diff_mat = op2.Mat(sparsity, valuetype, "diff_mat")
+        op2.par_loop(diff, elements(3, 3),
+                     diff_mat((elem_node[op2.i[0]], elem_node[op2.i[1]]), op2.INC),
+                     coords(elem_vnode, op2.READ))
+        diff_mat.dump('diff_mat.%s.%s.dump' % (opt['backend'], os.path.split(opt['mesh'])[-1]))
+        op2.info('diff_mat:', adv_mat.handle.sizes)
 
     tracer_vals = np.zeros(num_nodes, dtype=valuetype)
     tracer = op2.Dat(nodes, tracer_vals, valuetype, "tracer")
@@ -157,12 +158,13 @@ def main(opt):
 
     # Assemble and solve
 
-    solver = op2.Solver()
+    solver = op2.Solver()#relative_tolerance=1e-12)
 
-    #while T < 0.011:
-    steps = 1
+    #while T < 0.015:
+    steps = 50
     advs = np.empty((steps,) + b.data.shape, valuetype)
     diffs = np.empty((steps,) + b.data.shape, valuetype)
+    ts = np.empty((2*steps,) + tracer.data.shape, valuetype)
     for step in range(steps):
 
         # Advection
@@ -177,8 +179,9 @@ def main(opt):
                          tracer(elem_node, op2.READ),
                          velocity(elem_vnode, op2.READ))
 
-            #solver.solve(adv_mat, tracer, b)
+            solver.solve(adv_mat, tracer, b)
             advs[step, :] = b.data[:]
+            ts[2*step, :] = tracer.data[:]
             op2.info('adv_rhs:', b.data)
 
         # Diffusion
@@ -190,8 +193,9 @@ def main(opt):
                          coords(elem_vnode, op2.READ),
                          tracer(elem_node, op2.READ))
 
-            #solver.solve(diff_mat, tracer, b)
+            solver.solve(diff_mat, tracer, b)
             diffs[step, :] = b.data[:]
+            ts[2*step+1, :] = tracer.data[:]
             op2.info('diff_rhs:', b.data)
 
         T = T + dt
@@ -200,6 +204,8 @@ def main(opt):
         np.save(f, advs)
     with open('diffs.%s.%d.npy' % (opt['backend'], op2.MPI.comm.rank), 'wb') as f:
         np.save(f, diffs)
+    with open('ts.%s.%d.npy' % (opt['backend'], op2.MPI.comm.rank), 'wb') as f:
+        np.save(f, ts)
     if opt['print_output'] or opt['test_output']:
         analytical_vals = np.zeros(num_nodes, dtype=valuetype)
         analytical = op2.Dat(nodes, analytical_vals, valuetype, "analytical")

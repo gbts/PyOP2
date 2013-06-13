@@ -96,7 +96,8 @@ class MPIConfig(object):
 MPI = MPIConfig()
 
 def info(*msg):
-    print('[%d]' % MPI.comm.rank if MPI.parallel else '', *msg)
+    pass
+    #print('[%d]' % MPI.comm.rank if MPI.parallel else '', *msg)
 
 def debug(*msg):
     if cfg.debug:
