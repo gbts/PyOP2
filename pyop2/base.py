@@ -285,6 +285,7 @@ class Arg(object):
             # executing over the halo region, which occurs after we've
             # called this reduction, we don't subsequently overwrite
             # the result.
+            info('reduction:', self.data._data, self.data._buf)
             MPI.comm.Allreduce(self.data._data, self.data._buf, op=op)
 
     def reduction_end(self):

@@ -218,6 +218,7 @@ class ParLoop(device.ParLoop, host.ParLoop):
 
         #TODO: compute partition size
         plan = self._get_plan(1024)
+        info(plan)
         _args.append(plan.blkmap)
         _args.append(plan.offset)
         _args.append(plan.nelems)

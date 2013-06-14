@@ -145,7 +145,9 @@ def main(opt):
 
     solver = op2.Solver()
 
-    while T < 0.015:
+    #while T < 0.015:
+    steps = 1
+    for step in range(steps):
 
         # Advection
 
@@ -190,12 +192,14 @@ def main(opt):
         l2norm = dot(t - a, t - a) * dx
         l2_kernel, = compile_form(l2norm, "error_norm")
         result = op2.Global(1, [0.0])
+        #op2.device.Plan = op2.device.CPlan
         op2.par_loop(l2_kernel, elements,
                      result(op2.INC),
                      coords(elem_vnode,op2.READ),
                      tracer(elem_node,op2.READ),
                      analytical(elem_node,op2.READ)
                      )
+        op2.info(result)
         if op2.MPI.comm.rank == 0:
             with open("adv_diff_mpi.%s.out" % os.path.split(opt['mesh'])[-1], "w") as out:
                 out.write(str(result.data[0]))
