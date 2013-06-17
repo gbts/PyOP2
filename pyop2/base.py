@@ -1526,7 +1526,7 @@ class ParLoop(LazyComputation):
 
     def __init__(self, kernel, itspace, *args):
         LazyComputation.__init__(self,
-                                 set([a.data for a in args if a.access in [READ, RW]]) | Const._defs),
+                                 set([a.data for a in args if a.access in [READ, RW]]) | Const._defs,
                                  set([a.data for a in args if a.access in [RW, WRITE, MIN, MAX, INC]]))
 
         # Always use the current arguments, also when we hit cache
