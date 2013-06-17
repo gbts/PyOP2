@@ -90,12 +90,6 @@ def _force(reads, writes):
             nt.append(cont)
     _trace = nt
 
-def _force_all():
-    global _trace
-    for cont in _trace:
-        cont._run()
-    _trace = list()
-
 """List maintaining delayed computation until they are executed."""
 _trace = list()
 

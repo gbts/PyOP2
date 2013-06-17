@@ -333,13 +333,16 @@ class TestGeneratedCodeCache:
                      a(op2.IdentityMap, op2.WRITE),
                      x(iter2ind1[0], op2.READ))
 
+        # force evaluation
+        a.data
         assert len(self.cache) == 1
 
         op2.par_loop(op2.Kernel(kernel_cpy, "kernel_cpy"),
                      iterset,
                      a(op2.IdentityMap, op2.WRITE),
                      x(iter2ind1[0], op2.READ))
-
+        # force evaluation
+        a.data
         assert len(self.cache) == 1
 
     def test_diff_kernel(self, backend, iterset, iter2ind1, x, a):
@@ -353,6 +356,8 @@ class TestGeneratedCodeCache:
                      a(op2.IdentityMap, op2.WRITE),
                      x(iter2ind1[0], op2.READ))
 
+        # force evaluation
+        a.data
         assert len(self.cache) == 1
 
         kernel_cpy = "void kernel_cpy(unsigned int* DST, unsigned int* SRC) { *DST = *SRC; }"
@@ -362,6 +367,8 @@ class TestGeneratedCodeCache:
                      a(op2.IdentityMap, op2.WRITE),
                      x(iter2ind1[0], op2.READ))
 
+        # force evaluation
+        a.data
         assert len(self.cache) == 2
 
     def test_invert_arg_similar_shape(self, backend, iterset, iter2ind1, x, y):
@@ -382,6 +389,8 @@ void kernel_swap(unsigned int* x, unsigned int* y)
                      x(iter2ind1[0], op2.RW),
                      y(iter2ind1[0], op2.RW))
 
+        # force evaluation
+        x.data
         assert len(self.cache) == 1
 
         op2.par_loop(op2.Kernel(kernel_swap, "kernel_swap"),
@@ -389,6 +398,8 @@ void kernel_swap(unsigned int* x, unsigned int* y)
                      y(iter2ind1[0], op2.RW),
                      x(iter2ind1[0], op2.RW))
 
+        # force evaluation
+        y.data
         assert len(self.cache) == 1
 
     def test_dloop_ignore_scalar(self, backend, iterset, a, b):
@@ -408,12 +419,18 @@ void kernel_swap(unsigned int* x, unsigned int* y)
                      iterset,
                      a(op2.IdentityMap, op2.RW),
                      b(op2.IdentityMap, op2.RW))
+
+        # force evaluation
+        a.data
         assert len(self.cache) == 1
 
         op2.par_loop(op2.Kernel(kernel_swap, "kernel_swap"),
                      iterset,
                      b(op2.IdentityMap, op2.RW),
                      a(op2.IdentityMap, op2.RW))
+
+        # force evaluation
+        b.data
         assert len(self.cache) == 1
 
     def test_vector_map(self, backend, iterset, x2, iter2ind22):
@@ -433,12 +450,17 @@ void kernel_swap(unsigned int* x[2])
         op2.par_loop(op2.Kernel(kernel_swap, "kernel_swap"),
                      iterset,
                      x2(iter2ind22, op2.RW))
+
+        # force evaluation
+        x2.data
         assert len(self.cache) == 1
 
         op2.par_loop(op2.Kernel(kernel_swap, "kernel_swap"),
                      iterset,
                      x2(iter2ind22, op2.RW))
 
+        # force evaluation
+        x2.data
         assert len(self.cache) == 1
 
     def test_map_index_order_matters(self, backend, iterset, x2, iter2ind22):
@@ -450,12 +472,16 @@ void kernel_swap(unsigned int* x[2])
                      x2(iter2ind22[0], op2.INC),
                      x2(iter2ind22[1], op2.INC))
 
+        # force evaluation
+        x2.data
         assert len(self.cache) == 1
 
         op2.par_loop(k, iterset,
                      x2(iter2ind22[1], op2.INC),
                      x2(iter2ind22[0], op2.INC))
 
+        # force evaluation
+        x2.data
         assert len(self.cache) == 2
 
     def test_same_iteration_space_works(self, backend, iterset, x2, iter2ind22):
@@ -466,11 +492,15 @@ void kernel_swap(unsigned int* x[2])
         op2.par_loop(k, iterset(2),
                      x2(iter2ind22[op2.i[0]], op2.INC))
 
+        # force evaluation
+        x2.data
         assert len(self.cache) == 1
 
         op2.par_loop(k, iterset(2),
                      x2(iter2ind22[op2.i[0]], op2.INC))
 
+        # force evaluation
+        x2.data
         assert len(self.cache) == 1
 
 
@@ -483,6 +513,9 @@ void kernel_swap(unsigned int* x[2])
         c = op2.Const(1, 1, name='c', dtype=numpy.uint32)
 
         op2.par_loop(k, iterset, d(op2.IdentityMap, op2.WRITE))
+
+        # force evaluation
+        d.data
         assert len(self.cache) == 1
 
         c.remove_from_namespace()
@@ -490,6 +523,9 @@ void kernel_swap(unsigned int* x[2])
         c = op2.Const(2, (1,1), name='c', dtype=numpy.uint32)
 
         op2.par_loop(k, iterset, d(op2.IdentityMap, op2.WRITE))
+
+        # force evaluation
+        d.data
         assert len(self.cache) == 2
 
         c.remove_from_namespace()
@@ -503,10 +539,16 @@ void kernel_swap(unsigned int* x[2])
         c = op2.Const(1, 1, name='c', dtype=numpy.uint32)
 
         op2.par_loop(k, iterset, d(op2.IdentityMap, op2.WRITE))
+
+        # force evaluation
+        d.data
         assert len(self.cache) == 1
 
         c.data = 2
         op2.par_loop(k, iterset, d(op2.IdentityMap, op2.WRITE))
+
+        # force evaluation
+        d.data
         assert len(self.cache) == 1
 
         c.remove_from_namespace()
@@ -519,10 +561,16 @@ void kernel_swap(unsigned int* x[2])
         k = op2.Kernel("""void k(void *x) {}""", 'k')
 
         op2.par_loop(k, iterset, d(op2.IdentityMap, op2.WRITE))
+
+        # force evaluation
+        d.data
         assert len(self.cache) == 1
 
         d = op2.Dat(iterset, range(nelems), numpy.int32)
         op2.par_loop(k, iterset, d(op2.IdentityMap, op2.WRITE))
+
+        # force evaluation
+        d.data
         assert len(self.cache) == 2
 
     def test_change_global_dtype_matters(self, backend, iterset):
@@ -533,10 +581,16 @@ void kernel_swap(unsigned int* x[2])
         k = op2.Kernel("""void k(void *x) {}""", 'k')
 
         op2.par_loop(k, iterset, g(op2.INC))
+
+        # force evaluation
+        g.data
         assert len(self.cache) == 1
 
         g = op2.Global(1, 0, dtype=numpy.float64)
         op2.par_loop(k, iterset, g(op2.INC))
+
+        # force evaluation
+        g.data
         assert len(self.cache) == 2
 
 class TestKernelCache:
