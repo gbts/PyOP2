@@ -683,7 +683,7 @@ class ParLoop(device.ParLoop):
             op2stride.remove_from_namespace()
 
 def par_loop(kernel, it_space, *args):
-    ParLoop(kernel, it_space, *args).compute()
+    ParLoop(kernel, it_space, *args)
 
 def _setup():
     global _ctx
