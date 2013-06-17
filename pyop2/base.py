@@ -947,6 +947,7 @@ class Const(DataCarrier):
         """Remove this Const object from the namespace
 
         This allows the same name to be redeclared with a different shape."""
+        _force(set(), set([self]))
         Const._defs.discard(self)
 
     def _format_declaration(self):
