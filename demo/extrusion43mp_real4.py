@@ -96,7 +96,7 @@ void comp_dat(double *x[], double *y[], int j)
 
 valuetype=np.float64
 
-nodes, vnodes, coords, elements, elem_node, elem_vnode = read_triangle(mesh_name)
+nodes, vnodes, coords, elements, elem_node, elem_vnode = read_triangle(mesh_name, layers)
 
 #mesh data
 mesh2d = np.array([3,3,1])
@@ -269,11 +269,8 @@ ind_coords = compute_ind_extr(nums,map_dofs_coords,lins,layers,mesh2d,dofs_coord
 lsize = nums[2]*map_dofs_field
 ind_field = compute_ind_extr(nums,map_dofs_field,lins,layers,mesh2d,dofs_field,A,wedges,mapp_field,lsize)
 
-#compose the maps that I want to have:
-#maps from 3D elems to nodes (for the coords)
-elem_dofs = op2.Map(elements,coords_dofsSet,map_dofs_coords,ind_coords,"elem_dofs",off_coords)
-elem_elem = op2.Map(elements,wedges_dofsSet,map_dofs_field,ind_field,"elem_elem",off_field)
-
+elem_dofs = op2.ExtrudedMap(elements, coords_dofsSet, map_dofs_coords, off_coords, ind_coords, "elem_dofs")
+elem_elem = op2.ExtrudedMap(elements, wedges_dofsSet, map_dofs_field, off_field, ind_field, "elem_elem")
 ### THE RESULT ARRAY
 g = op2.Global(1, data=0.0, name='g')
 

@@ -96,7 +96,7 @@ void comp_dat(double *x[], double *y[], int j)
 
 valuetype=np.float64
 
-nodes, vnodes, coords, elements, elem_node, elem_vnode = read_triangle(mesh_name)
+nodes, vnodes, coords, elements, elem_node, elem_vnode = read_triangle(mesh_name, layers)
 
 #mesh data
 mesh2d = np.array([3,3,1])
@@ -126,7 +126,6 @@ for d in range(0,2):
     for j in range(0,mesh2d[i]*len(A[d])):
       if dofs[i][d] != 0:
         map_dofs += 1
-#print "The size of the dofs map is = %d" % map_dofs
 
 map_dofs_coords = 6
 map_dofs_field = 1
@@ -256,23 +255,21 @@ tdat = time.clock() - t0dat
 ### DECLARE OP2 STRUCTURES
 #create the set of dofs, they will be our'virtual' mesh entity
 #the dat has to be based on dofs not specific mesh elements
-coords_dofsSet = op2.Set(nums[0] * layers * 2, 1,"coords_dofsSet")
+coords_dofsSet = op2.Set(nums[0] * layers, 2, "coords_dofsSet")
 coords = op2.Dat(coords_dofsSet, coords_dat, np.float64, "coords")
 
-wedges_dofsSet = op2.Set(nums[2] * wedges, 1,"wedges_dofsSet")
-field = op2.Dat(wedges_dofsSet, field_dat,np.float64,"field")
+wedges_dofsSet = op2.Set(nums[2] * wedges, 1, "wedges_dofsSet")
+field = op2.Dat(wedges_dofsSet, field_dat, np.float64, "field")
 
 ### THE MAP from the ind
 #create the map from element to dofs for each element in the 2D mesh
 lsize = nums[2]*map_dofs_coords
-ind_coords = compute_ind_extr(nums,map_dofs_coords,lins,layers,mesh2d,dofs_coords,A,wedges,mapp_coords,lsize)
+ind_coords = compute_ind_extr(nums, map_dofs_coords, lins, layers, mesh2d, dofs_coords, A, wedges, mapp_coords, lsize)
 lsize = nums[2]*map_dofs_field
-ind_field = compute_ind_extr(nums,map_dofs_field,lins,layers,mesh2d,dofs_field,A,wedges,mapp_field,lsize)
+ind_field = compute_ind_extr(nums, map_dofs_field, lins, layers, mesh2d, dofs_field, A, wedges, mapp_field, lsize)
 
-elem_dofs = op2.Map(elements,coords_dofsSet,map_dofs_coords,ind_coords,"elem_dofs",off_coords)
-
-elem_elem = op2.Map(elements,wedges_dofsSet,map_dofs_field,ind_field,"elem_elem",off_field)
-
+elem_dofs = op2.ExtrudedMap(elements, coords_dofsSet, map_dofs_coords, off_coords, ind_coords, "elem_dofs")
+elem_elem = op2.ExtrudedMap(elements, wedges_dofsSet, map_dofs_field, off_field, ind_field, "elem_elem")
 
 ### THE RESULT ARRAY
 g = op2.Global(1, data=0.0, name='g')
@@ -281,7 +278,6 @@ duration1 = time.clock() - t0ind
 
 ### ADD LAYERS INFO TO ITERATION SET
 # the elements set must also contain the layers
-elements.setLayers(layers)
 elements.setPartitionSize(partition_size)
 
 ### CALL PAR LOOP
