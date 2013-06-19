@@ -36,7 +36,7 @@ import numpy
 import random
 
 from pyop2 import op2
-from computeind import compute_ind_extr
+from pyop2.computeind import compute_ind_extr
 
 def _seed():
     return 0.02041724
