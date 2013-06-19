@@ -401,7 +401,11 @@ class Set(object):
 
 
 class ExtrudedSet(Set):
-    """OP2 Extruded Set.
+    """
+    OP2 Extruded Set.
+
+    Set which has an extra parameter that specifies the number of
+    layers in the extrusion.
     """
     @validate_type(('size', (int, tuple, list), SizeTypeError),
                    ('name', str, NameTypeError))
@@ -413,20 +417,20 @@ class ExtrudedSet(Set):
 
     @property
     def layers(self):
-        """User-defined label"""
+        """Number of layers in the extrusion"""
         return self._layers
 
     @property
     def partsize(self):
-        """User-defined label"""
+        """Partition size of the base-mesh"""
         return self._partsize
 
     def setLayers(self,layers):
-        """User-defined label"""
+        """Set the number of mesh layers"""
         self._layers = layers
 
     def setPartitionSize(self,partsize):
-        """User-defined label"""
+        """Set the partition size in the base mesh."""
         self._partsize = partsize
 
 class Halo(object):
@@ -1183,6 +1187,13 @@ IdentityMap = Map(Set(0), Set(0), 1, [], 'identity')
 """The identity map.  Used to indicate direct access to a :class:`Dat`."""
 
 class ExtrudedMap(Map):
+    """
+    Extruded Map type to be used in extruded meshes.
+
+    The extruded map takes an extra offset parameter which
+    represents the offsets that need to be added to the base layer DOFs
+    when iterating over the elements of the column.
+    """
     @validate_type(('iterset', Set, SetTypeError), ('dataset', Set, SetTypeError), \
             ('dim', int, DimTypeError), ('name', str, NameTypeError))
     def __init__(self, iterset, dataset, dim, off, values=None, name=None):
@@ -1191,7 +1202,7 @@ class ExtrudedMap(Map):
 
     @property
     def off(self):
-        """Mapping array."""
+        """Return the vertical offset."""
         return self._off
 
 class Sparsity(Cached):
