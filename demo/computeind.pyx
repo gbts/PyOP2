@@ -50,10 +50,7 @@ def compute_ind(np.ndarray[DTYPE_t, ndim=1] nums,
               for l in range(0,wedges):
                     ind[count + l * nums[2]*a4*mesh2d[i]] = l + m*a4*(layers - d) + a3 + offset
               count+=1
-                    #ind[count + l * a4 * mesh2d[i]] = l + m*a4*(layers - d) + a3 + offset
-              #count+=1
             c+=1
-          #count+= (wedges-d-1)*a4*mesh2d[i]
         elif dofs[i, 1-d] != 0:
           c+= <unsigned int>mesh2d[i]
         offset += a4*nums[i]*(layers - d)
@@ -155,7 +152,6 @@ def swap_ind_entries(np.ndarray[DTYPE_t, ndim=1] ind,
                 pos = 0
             break
         lim += 1
-  print "swaps = %d" % swaps
   return ind
 
 @cython.boundscheck(False)
@@ -195,5 +191,4 @@ def swap_ind_entries_batch(np.ndarray[DTYPE_t, ndim=1] ind,
                 sw += map_dofs
 
     i += pos * map_dofs
-  print "swaps = %d" % swaps
   return ind

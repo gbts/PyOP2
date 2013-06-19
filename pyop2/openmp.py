@@ -85,7 +85,7 @@ class Arg(host.Arg):
         return "%(type)s %(name)s_l[%(max_threads)s][%(dim)s]" % \
           {'type' : self.ctype,
            'name' : self.c_arg_name(),
-           'dim' : self.data.cdim*8,
+           'dim' : self.data.cdim+8,
            # Ensure different threads are on different cache lines
            'max_threads' : _max_threads}
 
@@ -95,7 +95,7 @@ class Arg(host.Arg):
         else:
             init = "%(name)s[i]" % {'name' : self.c_arg_name()}
         return "for ( int i = 0; i < %(dim)s; i++ ) %(name)s_l[tid][i] = %(init)s" % \
-          {'dim' : self.data.cdim*8,
+          {'dim' : self.data.cdim+8,
            'name' : self.c_arg_name(),
            'init' : init}
 

@@ -42,7 +42,6 @@ from pyop2.ffc_interface import compile_form
 from triangle_reader_extr import read_triangle
 from ufl import *
 from computeind import compute_ind_extr
-#from computeind import swap_ind_entries
 import sys
 
 import numpy as np
@@ -259,6 +258,7 @@ off = np.zeros(map_dofs, dtype = np.int32)
 off_coords = np.zeros(map_dofs_coords, dtype = np.int32)
 off_field = np.zeros(map_dofs_field, dtype = np.int32)
 off_res = np.zeros(map_dofs_res, dtype = np.int32)
+
 ### THE OFFSET array
 #for 2D and 3D
 count = 0
@@ -362,4 +362,3 @@ tloop2 = time.time() - t0loop2
 ttloop = tloop / 10
 print nums[0], nums[1], nums[2], layers, duration1, tloop, tloop2, g.data
 print res_dat[0:6]
-#print g.data

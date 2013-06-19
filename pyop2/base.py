@@ -1089,7 +1089,7 @@ class Map(object):
 
     @validate_type(('iterset', Set, SetTypeError), ('dataset', Set, SetTypeError), \
             ('dim', int, DimTypeError), ('name', str, NameTypeError))
-    def __init__(self, iterset, dataset, dim, values=None, name=None, off=None, dimChange=None, elem_offsets=None, elem_sizes=None, stagein=None):
+    def __init__(self, iterset, dataset, dim, values=None, name=None):
         self._iterset = iterset
         self._dataset = dataset
         self._dim = dim
