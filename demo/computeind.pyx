@@ -188,32 +188,12 @@ def swap_ind_entries_batch(np.ndarray[DTYPE_t, ndim=1] ind,
                 swaps += 1
                 pos += 1
 
-                #if sw < 20*6:
-                #    ssw = sw / 6
-                #    jj = j / 6
-                #    print "swap to %d the ind at" % ssw
-                #    print "----------------------> %d " % jj
-                #    print ind[i:i+map_dofs], ind[j:j+map_dofs]
-
                 for n in range(0, map_dofs):
                     aux = ind[j + n]
                     ind[j + n] = ind[sw + n]
                     ind[sw + n] = aux
                 sw += map_dofs
-    #if sw < 120:
-    #    print "done triangle"
-    #if swaps < 1000:
-    #    print "swaps = %d" % swaps
+
     i += pos * map_dofs
   print "swaps = %d" % swaps
   return ind
-
-#cdef data_to_numpy_array_with_spec(void * ptr, np.npy_intp size, int t):
-#    """Return an array of SIZE elements (each of type T) with data from PTR."""
-#    return np.PyArray_SimpleNewFromData(1, &size, t, ptr)
-
-#cdef ext
-#def compute_ind2(nums,map_dofs,lins,layers,mesh2d,dofs,A,wedges,mapp,lsize):
-#    cdef int *ind_data
-#    compute_ind_function(nums, map_dofs, lins, layers, mesh2d, dofs, &ind_data)
-#    return data_to_numpy_array_with_spec(ind_data, lsize, np.NPY_INT32)
