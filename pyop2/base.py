@@ -1145,9 +1145,8 @@ class Map(object):
 
     @property
     def off(self):
-        """User-defined label"""
-        return self._off
-
+        """Return None as this is not an ExtrudedMap"""
+        return None
 
     def __str__(self):
         return "OP2 Map: %s from (%s) to (%s) with dim %s" \
