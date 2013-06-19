@@ -38,6 +38,8 @@ import random
 from pyop2 import op2
 from pyop2.computeind import compute_ind_extr
 
+backends = ['sequential', 'openmp']
+
 def _seed():
     return 0.02041724
 
