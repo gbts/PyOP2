@@ -185,7 +185,7 @@ void kernel_soa(unsigned int * x) { OP2_STRIDE(x, 0) = 42; OP2_STRIDE(x, 1) = 43
         kernel = """void k(unsigned int *x) { *x = 1; }"""
         x_data = x.data
         op2.par_loop(op2.Kernel(kernel, 'k'), elems, x(op2.IdentityMap, op2.WRITE))
-        op2._force(set([x]),set())
+        op2.base._force(set([x]),set())
         with pytest.raises((RuntimeError, ValueError)):
             x_data[0] = 1
 
