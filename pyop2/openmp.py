@@ -71,9 +71,6 @@ class Arg(host.Arg):
     def c_kernel_arg_name(self, idx=None):
         return "p_%s[%s]" % (self.c_arg_name(), idx or 'tid')
 
-    def c_global_reduction_name(self):
-        return "%s_l[tid]" % self.c_arg_name()
-
     def c_local_tensor_name(self):
         return self.c_kernel_arg_name(str(_max_threads))
 
@@ -119,7 +116,7 @@ class Arg(host.Arg):
         }""" % {'combine' : combine,
                 'dim' : self.data.cdim}
 
-    def c_global_reduction_name(self, count):
+    def c_global_reduction_name(self, count=None):
         return "%(name)s_l%(count)d[0]" % {
                   'name' : self.c_arg_name(),
                   'count' : count}
