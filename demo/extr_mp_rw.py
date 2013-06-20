@@ -324,7 +324,7 @@ duration1 = time.clock() - t0ind
 
 ### ADD LAYERS INFO TO ITERATION SET
 # the elements set must also contain the layers
-elements.setPartitionSize(partition_size)
+elements.partition_size = partition_size
 
 #t0loop= time.clock()
 ### CALL PAR LOOP

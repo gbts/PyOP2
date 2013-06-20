@@ -54,7 +54,7 @@ parser.add_argument('-m', '--mesh',
                     required=True,
                     help='Base name of triangle mesh (excluding the .ele or .node extension)')
 
-parser.add_argument('-l', '--layers',
+parser.add_argument('-ll', '--layers',
                     action='store',
                     type=str,
                     required=True,
@@ -267,7 +267,7 @@ duration1 = time.clock() - t0ind
 
 ### ADD LAYERS INFO TO ITERATION SET
 # the elements set must also contain the layers
-elements.setPartitionSize(partition_size)
+elements.partition_size = partition_size
 
 ### CALL PAR LOOP
 # Compute volume
