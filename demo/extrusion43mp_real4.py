@@ -58,12 +58,12 @@ parser.add_argument('-l', '--layers',
                     action='store',
                     type=str,
                     required=True,
-                    help='Base name of triangle mesh (excluding the .ele or .node extension)')
+                    help='Number of extruded layers.')
 parser.add_argument('-p', '--partsize',
                     action='store',
                     type=str,
                     required=False,
-                    help='Base name of triangle mesh (excluding the .ele or .node extension)')
+                    help='Partition size in the base mesh.')
 opt = vars(parser.parse_args())
 op2.init(**opt)
 mesh_name = opt['mesh']
@@ -80,16 +80,6 @@ void comp_vol(double A[1], double *x[], double *y[], int j)
       abs = abs * (-1.0);
     A[0]+=0.5*abs*0.1 * y[0][0];
 }""","comp_vol");
-
-data_comp = op2.Kernel("""
-void comp_dat(double *x[], double *y[], int j)
-{
-    for(int i=0; i<6; i++){
-        for (int k=0; k<2; k++){
-            x[i][k] = y[i][k];
-        }
-    }
-    }""","comp_dat");
 
 # Set up simulation data structures
 
