@@ -1103,7 +1103,6 @@ class Map(object):
                                       allow_none=True)
         self._name = name or "map_%d" % Map._globalcount
         self._lib_handle = None
-        self._off = None
         Map._globalcount += 1
 
     @validate_type(('index', (int, IterationIndex), IndexTypeError))
