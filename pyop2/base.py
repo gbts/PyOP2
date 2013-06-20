@@ -1636,6 +1636,16 @@ class ParLoop(object):
     def generate_code(self):
         raise RuntimeError('Must select a backend')
 
+    def offset_args(self):
+        _args = []
+        for arg in self.args:
+            if arg._is_indirect or arg._is_mat:
+                maps = as_tuple(arg.map, Map)
+                for map in maps:
+                   if isinstance(map, ExtrudedMap):
+                       _args.append(map.offset)
+        return _args
+
     @property
     def it_space(self):
         """Iteration space of the parallel loop."""
