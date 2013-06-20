@@ -143,9 +143,9 @@ for i in range(0, nums[0]):
 
 k = 0
 count = 0
-addNodes = True #dofs[0][0] != 0 or dofs[0][1] != 0
-addEdges = False#dofs[1][0] != 0 or dofs[1][1] != 0
-addCells = False#dofs[2][0] != 0 or dofs[2][1] != 0
+addNodes = True
+addEdges = False
+addCells = False
 
 for i in range(0,lins): #for each cell to node mapping
   ns = mappp[i] - 1
@@ -172,9 +172,9 @@ for i in range(0,lins): #for each cell to node mapping
 mapp_field =np.empty(shape=(lins,), dtype=object)
 k = 0
 count = 0
-addNodes = False#dofs[0][0] != 0 or dofs[0][1] != 0
-addEdges = False#dofs[1][0] != 0 or dofs[1][1] != 0
-addCells = True#dofs[2][0] != 0 or dofs[2][1] != 0
+addNodes = False
+addEdges = False
+addCells = True
 
 for i in range(0,lins): #for each cell to node mapping
   ns = mappp[i] - 1
