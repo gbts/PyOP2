@@ -140,12 +140,14 @@ class Mat(base.Mat):
     @property
     def array(self):
         """Array of non-zero values."""
+        base._force(set([self]), set())
         if not hasattr(self, '_array'):
             self._init()
         return self._array
 
     @property
     def values(self):
+        base._force(set([self]), set())
         return self.handle[:,:]
 
     @property
