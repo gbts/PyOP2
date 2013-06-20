@@ -32,7 +32,7 @@
 # OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
-This demo verfieis that the integral of a unit cube is 1.
+This demo verifies that the integral of a unit cube is 1.
 
 The cube will be unstructured in the 2D plane and structured vertically.
 """
