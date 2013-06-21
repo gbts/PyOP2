@@ -99,6 +99,8 @@ cdef class Plan:
         self._need_exec_halo = any(arg._is_indirect_and_not_read or arg._is_mat
                                    for arg in args)
 
+        self._has_global_reduction = any(arg._is_global_reduction for arg in args)
+
         self._compute_partition_info(iset, partition_size, matrix_coloring, args)
         if staging:
             self._compute_staging_info(iset, partition_size, matrix_coloring, args)
@@ -364,19 +366,22 @@ cdef class Plan:
                             self._ncolors_core = pcolors.max() + 1
                             #self._ncolors_core = max(1, pcolors.max() + 1)
                             _base_color = self._ncolors_core
-                            # zero out working array (clear deps between core/owned/halo):
+                            # zero out working array (clear deps between core/owned):
                             for _rai in range(n_race_args):
                                 for _i in range(flat_race_args[_rai].size):
                                     flat_race_args[_rai].tmp[_i] = 0
 
 
                         if _p == _first_block_halo:
-                            _base_color = pcolors.max() + 1
-                            self._ncolors_owned = _base_color + 1
-                            # zero out working array (clear deps between core/owned/halo):
-                            for _rai in range(n_race_args):
-                                for _i in range(flat_race_args[_rai].size):
-                                    flat_race_args[_rai].tmp[_i] = 0
+                            if self._has_global_reduction:
+                                _base_color = pcolors.max() + 1
+                                self._ncolors_owned = _base_color + 1
+                                # zero out working array (clear deps between owned/halo):
+                                for _rai in range(n_race_args):
+                                    for _i in range(flat_race_args[_rai].size):
+                                        flat_race_args[_rai].tmp[_i] = 0
+                            else:
+                                self._ncolors_owned = pcolors.max() + 1
 
                     _mask = 0
                     for _t in range(offset[_p], offset[_p] + nelems[_p]):
