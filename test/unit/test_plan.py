@@ -326,8 +326,7 @@ class TestPlan:
         edges = op2.Set(0, 1, "edges")
         nodes = op2.Set(9, 1, "nodes")
 
-        e2n_vals = [[0,1], [0,2], [1,2], [1,5], [1,4], [2,4], [2,3], [3,4],
-                    [4,5], [5,6], [4,6], [4,7], [3,7], [6,7], [6,8], [7,8]]
+        e2n_vals = []
         e2n = op2.Map(edges, nodes, 2, e2n_vals, "edges2nodes")
         dat = op2.Dat(nodes, numpy.zeros(9, dtype=numpy.int32))
 
@@ -343,8 +342,7 @@ class TestPlan:
         edges = op2.Set(0, 1, "edges")
         nodes = op2.Set(9, 1, "nodes")
 
-        e2n_vals = [[0,1], [0,2], [1,2], [1,5], [1,4], [2,4], [2,3], [3,4],
-                    [4,5], [5,6], [4,6], [4,7], [3,7], [6,7], [6,8], [7,8]]
+        e2n_vals = []
         e2n = op2.Map(edges, nodes, 2, e2n_vals, "edges2nodes")
         dat = op2.Dat(nodes, numpy.zeros(9, dtype=numpy.int32))
         g = op2.Global(1, 0, numpy.uint32, "g")
