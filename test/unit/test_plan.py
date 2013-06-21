@@ -158,6 +158,25 @@ class TestPlan:
                              matrix_coloring=False,
                              partition_size=2)
 
+    def test_mpi_with_reduction(self, backend):
+        kernel = op2.Kernel("", "dummy")
+        edges = op2.Set([4,8,12,16], 1, "edges")
+        nodes = op2.Set(9, 1, "nodes")
+
+        e2n_vals = [[0,1], [0,2], [1,2], [1,5], [1,4], [2,4], [2,3], [3,4],
+                    [4,5], [5,6], [4,6], [4,7], [3,7], [6,7], [6,8], [7,8]]
+        e2n = op2.Map(edges, nodes, 2, e2n_vals, "edges2nodes")
+        dat = op2.Dat(nodes, numpy.zeros(9, dtype=numpy.int32))
+        g = op2.Global(1, 0, numpy.uint32, "g")
+
+        device.compare_plans(kernel,
+                             edges,
+                             dat(e2n[0], op2.INC), 
+                             dat(e2n[1], op2.INC),
+                             g(op2.INC),
+                             matrix_coloring=False,
+                             partition_size=2)
+
     def test_mpi_nocore(self, backend):
         kernel = op2.Kernel("", "dummy")
         edges = op2.Set([0,8,12,16], 1, "edges")
@@ -172,6 +191,25 @@ class TestPlan:
                              edges,
                              dat(e2n[0], op2.INC), 
                              dat(e2n[1], op2.INC),
+                             matrix_coloring=False,
+                             partition_size=2)
+
+    def test_mpi_nocore_with_reduction(self, backend):
+        kernel = op2.Kernel("", "dummy")
+        edges = op2.Set([0,8,12,16], 1, "edges")
+        nodes = op2.Set(9, 1, "nodes")
+
+        e2n_vals = [[0,1], [0,2], [1,2], [1,5], [1,4], [2,4], [2,3], [3,4],
+                    [4,5], [5,6], [4,6], [4,7], [3,7], [6,7], [6,8], [7,8]]
+        e2n = op2.Map(edges, nodes, 2, e2n_vals, "edges2nodes")
+        dat = op2.Dat(nodes, numpy.zeros(9, dtype=numpy.int32))
+        g = op2.Global(1, 0, numpy.uint32, "g")
+        
+        device.compare_plans(kernel,
+                             edges,
+                             dat(e2n[0], op2.INC),
+                             dat(e2n[1], op2.INC),
+                             g(op2.INC),
                              matrix_coloring=False,
                              partition_size=2)
 
@@ -192,6 +230,25 @@ class TestPlan:
                              matrix_coloring=False,
                              partition_size=2)
 
+    def test_mpi_noowned_with_reduction(self, backend):
+        kernel = op2.Kernel("", "dummy")
+        edges = op2.Set([4,4,12,16], 1, "edges")
+        nodes = op2.Set(9, 1, "nodes")
+
+        e2n_vals = [[0,1], [0,2], [1,2], [1,5], [1,4], [2,4], [2,3], [3,4],
+                    [4,5], [5,6], [4,6], [4,7], [3,7], [6,7], [6,8], [7,8]]
+        e2n = op2.Map(edges, nodes, 2, e2n_vals, "edges2nodes")
+        dat = op2.Dat(nodes, numpy.zeros(9, dtype=numpy.int32))
+        g = op2.Global(1, 0, numpy.uint32, "g")
+
+        device.compare_plans(kernel,
+                             edges,
+                             dat(e2n[0], op2.INC), 
+                             dat(e2n[1], op2.INC),
+                             g(op2.INC),
+                             matrix_coloring=False,
+                             partition_size=2)
+
     def test_mpi_nohalo(self, backend):
         kernel = op2.Kernel("", "dummy")
         edges = op2.Set([4,8,8,16], 1, "edges")
@@ -209,6 +266,24 @@ class TestPlan:
                              matrix_coloring=False,
                              partition_size=2)
 
+    def test_mpi_nohalo_with_reduction(self, backend):
+        kernel = op2.Kernel("", "dummy")
+        edges = op2.Set([4,8,8,16], 1, "edges")
+        nodes = op2.Set(9, 1, "nodes")
+
+        e2n_vals = [[0,1], [0,2], [1,2], [1,5], [1,4], [2,4], [2,3], [3,4],
+                    [4,5], [5,6], [4,6], [4,7], [3,7], [6,7], [6,8], [7,8]]
+        e2n = op2.Map(edges, nodes, 2, e2n_vals, "edges2nodes")
+        dat = op2.Dat(nodes, numpy.zeros(9, dtype=numpy.int32))
+        g = op2.Global(1, 0, numpy.uint32, "g")
+
+        device.compare_plans(kernel,
+                             edges,
+                             dat(e2n[0], op2.INC), 
+                             dat(e2n[1], op2.INC),
+                             g(op2.INC),
+                             matrix_coloring=False,
+                             partition_size=2)
 
     def test_mpi_onlyhalo(self, backend):
         kernel = op2.Kernel("", "dummy")
@@ -224,6 +299,25 @@ class TestPlan:
                              edges,
                              dat(e2n[0], op2.INC), 
                              dat(e2n[1], op2.INC),
+                             matrix_coloring=False,
+                             partition_size=2)
+
+    def test_mpi_onlyhalo_with_reduction(self, backend):
+        kernel = op2.Kernel("", "dummy")
+        edges = op2.Set([0,0,12,16], 1, "edges")
+        nodes = op2.Set(9, 1, "nodes")
+
+        e2n_vals = [[0,1], [0,2], [1,2], [1,5], [1,4], [2,4], [2,3], [3,4],
+                    [4,5], [5,6], [4,6], [4,7], [3,7], [6,7], [6,8], [7,8]]
+        e2n = op2.Map(edges, nodes, 2, e2n_vals, "edges2nodes")
+        dat = op2.Dat(nodes, numpy.zeros(9, dtype=numpy.int32))
+        g = op2.Global(1, 0, numpy.uint32, "g")
+
+        device.compare_plans(kernel,
+                             edges,
+                             dat(e2n[0], op2.INC), 
+                             dat(e2n[1], op2.INC),
+                             g(op2.INC),
                              matrix_coloring=False,
                              partition_size=2)
 
@@ -244,6 +338,24 @@ class TestPlan:
                              matrix_coloring=False,
                              partition_size=2)
 
+    def test_mpi_empty_with_reduction(self, backend):
+        kernel = op2.Kernel("", "dummy")
+        edges = op2.Set(0, 1, "edges")
+        nodes = op2.Set(9, 1, "nodes")
+
+        e2n_vals = [[0,1], [0,2], [1,2], [1,5], [1,4], [2,4], [2,3], [3,4],
+                    [4,5], [5,6], [4,6], [4,7], [3,7], [6,7], [6,8], [7,8]]
+        e2n = op2.Map(edges, nodes, 2, e2n_vals, "edges2nodes")
+        dat = op2.Dat(nodes, numpy.zeros(9, dtype=numpy.int32))
+        g = op2.Global(1, 0, numpy.uint32, "g")
+
+        device.compare_plans(kernel,
+                             edges,
+                             dat(e2n[0], op2.INC), 
+                             dat(e2n[1], op2.INC),
+                             g(op2.INC),
+                             matrix_coloring=False,
+                             partition_size=2)
 
 if __name__ == '__main__':
     import os
